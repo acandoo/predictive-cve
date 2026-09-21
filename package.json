@@ -13,7 +13,8 @@
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "dotenv": "^18.0.1",
-    "drizzle-orm": "1.0.0-rc.4"
+    "drizzle-orm": "1.0.0-rc.4",
+    "simple-git": "^3.36.0"
   },
   "devDependencies": {
     "@tsconfig/node-ts": "^23.6.4",
