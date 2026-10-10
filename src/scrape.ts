@@ -84,7 +84,9 @@ async function processGitRepo(
   await using directory = await fs.mkdtempDisposable(
     path.join(os.tmpdir(), 'predictive-cve-repo')
   )
-  const git = simpleGit(directory.path)
+  const git = simpleGit(directory.path, {
+    maxConcurrentProcesses: os.availableParallelism()
+  })
 
   const [repoCves, commits] = await Promise.all([
     findRepoCves(octokit, repoUrl),
