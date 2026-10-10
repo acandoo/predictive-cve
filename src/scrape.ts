@@ -141,7 +141,7 @@ async function findRepoCves(
 
 function parseGithubRepoUrl(repoUrl: string): { owner: string; repo: string } {
   const url = new URL(repoUrl)
-  const [owner, repo] = url.pathname.split('/').filter(Boolean)
+  const [owner, repo] = url.pathname.split('/')
 
   return { owner, repo }
 }
