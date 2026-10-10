@@ -12,7 +12,7 @@ import type { SimpleGit } from 'simple-git'
 
 import { repos, cves, samples } from './db/schema.ts'
 import { clone } from './lib/cloner.ts'
-import { SAMPLE_DURATION } from './lib/constants.ts'
+import { SAMPLE_DURATION, CUTOFF } from './lib/constants.ts'
 
 type Advisory = Awaited<
   ReturnType<Octokit['rest']['securityAdvisories']['listGlobalAdvisories']>
@@ -31,7 +31,10 @@ export async function scrapeData(): Promise<void> {
 
   for await (const response of await octokit.paginate.iterator(
     octokit.rest.securityAdvisories.listGlobalAdvisories,
-    { per_page: 100 }
+    {
+      per_page: 100,
+      before: CUTOFF.toString()
+    }
   )) {
     await Promise.all(
       response.data
