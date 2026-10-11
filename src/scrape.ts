@@ -76,6 +76,12 @@ export async function scrapeData(): Promise<void> {
   }
 }
 
+/**
+ * Process a Git repository by fetching its commits and associated CVEs.
+ * @param db The database instance to use for storing the data.
+ * @param octokit The Octokit instance to use for GitHub API calls.
+ * @param repoUrl The URL of the Git repository to process.
+ */
 async function processGitRepo(
   db: LibSQLDatabase<EmptyRelations>,
   octokit: Octokit,
@@ -152,6 +158,13 @@ function parseGithubRepoUrl(repoUrl: string): { owner: string; repo: string } {
   return { owner, repo }
 }
 
+/**
+ * Get the commits for a given Git repository, ordered from oldest to newest.
+ * @param git The SimpleGit instance to use for the Git operations.
+ * @param repoUrl The URL of the Git repository.
+ * @param directory The directory to clone the repository into.
+ * @returns A promise that resolves to an array of Git commits.
+ */
 async function readCommits(
   git: SimpleGit,
   repoUrl: string,
@@ -178,22 +191,30 @@ async function readCommits(
       )
       .reverse()
       .map(async ({ hash, date, author, email }) => {
-      const { insertions, deletions, files } = await git.diffSummary([
-        `${hash}^!`
-      ])
-      return {
-        hash,
-        date: Temporal.Instant.from(date),
-        author,
+        const { insertions, deletions, files } = await git.diffSummary([
+          `${hash}^!`
+        ])
+        return {
+          hash,
+          date: Temporal.Instant.from(date),
+          author,
           email,
-        insertions,
-        deletions,
-        files: files.length
-      }
-    })
+          insertions,
+          deletions,
+          files: files.length
+        }
+      })
   )
 }
 
+/**
+ * Build a list of sample rows for a given Git repository.
+ * @param git The SimpleGit instance to use for the Git operations.
+ * @param repoUrl The URL of the Git repository.
+ * @param commits A list of commits, ordered from oldest to newest.
+ * @param repoCves A list of CVEs associated with the repository.
+ * @returns A promise that resolves to an array of sample rows.
+ */
 async function buildSampleRows(
   git: SimpleGit,
   repoUrl: string,
