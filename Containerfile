@@ -14,4 +14,4 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml drizzle.config.ts ./
 COPY src ./src
 RUN pnpm install --frozen-lockfile --prod=true
 
-ENTRYPOINT ["node", "src/index.ts"]
+ENTRYPOINT ["pnpm", "run", "start"]
