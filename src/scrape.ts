@@ -171,7 +171,13 @@ async function readCommits(
   })
 
   return Promise.all(
-    output.all.map(async ({ hash, date, author, email }) => {
+    output.all
+      .filter(
+        ({ date }) =>
+          Temporal.Instant.compare(Temporal.Instant.from(date), CUTOFF) === -1
+      )
+      .reverse()
+      .map(async ({ hash, date, author, email }) => {
       const { insertions, deletions, files } = await git.diffSummary([
         `${hash}^!`
       ])
@@ -199,7 +205,7 @@ async function buildSampleRows(
   const firstDate = commits[0].date
   const lastDate = commits.at(-1)!.date
   const sampleCount = Math.floor(
-    firstDate.since(lastDate).total({ unit: 'milliseconds' }) / durationMs
+    lastDate.since(firstDate).total({ unit: 'milliseconds' }) / durationMs
   )
   console.log(`Building ${sampleCount} sample rows for ${repoUrl}`)
   const tagDates = await readTagDates(git)
