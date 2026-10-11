@@ -38,7 +38,7 @@ export async function scrapeData(): Promise<void> {
   )) {
     await Promise.all(
       response.data
-        .filter<GitHubAdvisory>(
+        .filter(
           (advisory): advisory is GitHubAdvisory =>
             !!advisory.source_code_location?.startsWith(
               'https://github.com/'
