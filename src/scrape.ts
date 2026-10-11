@@ -12,7 +12,14 @@ import type { SimpleGit } from 'simple-git'
 
 import { repos, cves, samples } from './db/schema.ts'
 import { clone } from './lib/cloner.ts'
-import { SAMPLE_DURATION, CUTOFF } from './lib/constants.ts'
+import {
+  CUTOFF,
+  DURATION_365D,
+  DURATION_90D,
+  SAMPLE_DURATION
+} from './lib/constants.ts'
+import { parseGithubRepoUrl } from './lib/github.ts'
+import type { GitCommit, TimePeriod } from './lib/types.ts'
 
 type Advisory = Awaited<
   ReturnType<Octokit['rest']['securityAdvisories']['listGlobalAdvisories']>
@@ -108,21 +115,6 @@ async function processGitRepo(
   }
 }
 
-type GitCommit = {
-  hash: string
-  date: Temporal.Instant
-  author: string
-  email: string
-  insertions: number
-  deletions: number
-  files: number
-}
-
-type TimePeriod = {
-  start: Temporal.Instant
-  end: Temporal.Instant
-}
-
 type SampleRow = typeof samples.$inferInsert
 
 async function findRepoCves(
@@ -149,13 +141,6 @@ async function findRepoCves(
     .map(({ published_at }) => ({
       publishedAt: Temporal.Instant.from(published_at)
     }))
-}
-
-function parseGithubRepoUrl(repoUrl: string): { owner: string; repo: string } {
-  const url = new URL(repoUrl)
-  const [owner, repo] = url.pathname.split('/').filter(Boolean)
-
-  return { owner, repo }
 }
 
 /**
@@ -190,14 +175,13 @@ async function readCommits(
           Temporal.Instant.compare(Temporal.Instant.from(date), CUTOFF) === -1
       )
       .reverse()
-      .map(async ({ hash, date, author, email }) => {
+      .map(async ({ hash, date, email }) => {
         const { insertions, deletions, files } = await git.diffSummary([
           `${hash}^!`
         ])
         return {
           hash,
           date: Temporal.Instant.from(date),
-          author,
           email,
           insertions,
           deletions,
@@ -262,11 +246,15 @@ async function buildSampleRow(
   const allCommits = commits.filter(
     (commit) => Temporal.Instant.compare(commit.date, period.end) < 0
   )
-  const commits90d = commitsInPeriod(commits, period.end, 90)
+  const commits90d = commits.filter(({ date }) =>
+    isInPeriod(date, period.end, DURATION_90D)
+  )
   console.log(
     `Filtered commits for repo ${repoUrl} for 90 days: ${commits90d.length}`
   )
-  const commits365d = commitsInPeriod(commits, period.end, 365)
+  const commits365d = commits.filter(({ date }) =>
+    isInPeriod(date, period.end, DURATION_365D)
+  )
   console.log(
     `Filtered commits for repo ${repoUrl} for 365 days: ${commits365d.length}`
   )
@@ -274,26 +262,46 @@ async function buildSampleRow(
     date_unix: new Date(period.end.epochMilliseconds),
     repo_url: repoUrl,
     cves_reported_365d: repoCves.filter(({ publishedAt }) =>
-      isInPeriod(publishedAt, period.end, 365)
+      isInPeriod(publishedAt, period.end, DURATION_365D)
     ).length,
-    ...contributorMetrics(commits90d, allCommits, period.end, 90, '90d'),
-    ...contributorMetrics(commits365d, allCommits, period.end, 365, '365d'),
+    ...contributorMetrics(
+      commits90d,
+      allCommits,
+      period.end,
+      DURATION_90D,
+      '90d'
+    ),
+    ...contributorMetrics(
+      commits365d,
+      allCommits,
+      period.end,
+      DURATION_365D,
+      '365d'
+    ),
     ...contributorMetrics(allCommits, allCommits, period.end, undefined, 'all'),
     commits_90d: commits90d.length,
     commits_365d: commits365d.length,
     commits_all: allCommits.length,
-    repo_age_days: Math.floor(elapsedDays(commits[0].date, period.end)),
+    repo_age_days: Math.floor(
+      period.end.since(commits[0].date).total({ unit: 'days' })
+    ),
     ...(await treeMetrics(git, allCommits.at(-1)?.hash)),
-    cov_inter_commit_90d: averageInterval(commits90d),
-    cov_inter_commit_365d: averageInterval(commits365d),
-    cov_inter_commit_all: averageInterval(allCommits),
-    cov_inter_tag_90d: averageDateInterval(
-      datesInPeriod(tagDates, period.end, 90)
+    cov_inter_commit_90d: normalizedCovBetweenInstants(
+      commits90d.map((c) => c.date)
     ),
-    cov_inter_tag_365d: averageDateInterval(
-      datesInPeriod(tagDates, period.end, 365)
+    cov_inter_commit_365d: normalizedCovBetweenInstants(
+      commits365d.map((c) => c.date)
     ),
-    cov_inter_tag_all: averageDateInterval(
+    cov_inter_commit_all: normalizedCovBetweenInstants(
+      allCommits.map((c) => c.date)
+    ),
+    cov_inter_tag_90d: normalizedCovBetweenInstants(
+      tagDates.filter((date) => isInPeriod(date, period.end, DURATION_90D))
+    ),
+    cov_inter_tag_365d: normalizedCovBetweenInstants(
+      tagDates.filter((date) => isInPeriod(date, period.end, DURATION_365D))
+    ),
+    cov_inter_tag_all: normalizedCovBetweenInstants(
       tagDates.filter((date) => Temporal.Instant.compare(date, period.end) <= 0)
     ),
     churn_90d: churn(commits90d),
@@ -305,67 +313,94 @@ async function buildSampleRow(
 function isInPeriod(
   date: Temporal.Instant,
   end: Temporal.Instant,
-  days: number
+  duration: Temporal.Duration
 ): boolean {
-  const start = end.subtract({ hours: days * 24 })
+  const start = end.subtract(duration)
   return (
     Temporal.Instant.compare(date, start) > 0 &&
     Temporal.Instant.compare(date, end) <= 0
   )
 }
 
-function elapsedDays(
-  earlier: Temporal.Instant,
-  later: Temporal.Instant
-): number {
-  return later.since(earlier).total({ unit: 'days' })
-}
-
-function commitsInPeriod(
-  commits: GitCommit[],
-  end: Temporal.Instant,
-  days: number
-) {
-  return commits.filter(({ date }) => isInPeriod(date, end, days))
-}
-
-function contributorMetrics(
+function contributorMetrics<T extends '90d' | '365d' | 'all'>(
   commits: GitCommit[],
   allCommits: GitCommit[],
   end: Temporal.Instant,
-  days: number | undefined,
-  suffix: '90d' | '365d' | 'all'
-) {
-  const counts = new Map<string, number>()
+  duration: Temporal.Duration | undefined,
+  suffix: T
+): {
+  [
+    K in
+      | `contributors_${T}`
+      | `bus_factor_${T}`
+      | `top_contributor_share_${T}`
+      | `new_contributor_rate_${T}`
+  ]: number
+} {
+  const authors: Array<{
+    emails: string[]
+    commits: number
+  }> = []
   for (const commit of commits) {
-    counts.set(commit.author, (counts.get(commit.author) ?? 0) + 1)
+    const existing = [
+      ...authors.filter((c) => c.emails.includes(commit.email)).entries()
+    ]
+    if (existing.length > 0) {
+      const [first, ...rest] = existing
+      first[1].commits += rest.reduce((total, [, c]) => total + c.commits, 0)
+      first[1].emails.push(...rest.flatMap(([, c]) => c.emails))
+      for (const [index] of rest) {
+        authors.splice(index, 1)
+      }
+    } else {
+      authors.push({
+        emails: [commit.email],
+        commits: 1
+      })
+    }
   }
-  const ordered = [...counts.values()].sort((a, b) => b - a)
+  console.log(`${authors.length} authors for ${suffix}`)
+
+  const ordered = authors.map((c) => c.commits).sort((a, b) => b - a)
   const total = commits.length
   let accumulated = 0
   let busFactor = 0
   while (accumulated < total / 2 && busFactor < ordered.length) {
     accumulated += ordered[busFactor++]
   }
-  const firstCommitByAuthor = new Map<string, Temporal.Instant>()
+
+  const firstCommitByAuthor = new Map<number, Temporal.Instant>()
   for (const commit of allCommits) {
-    if (!firstCommitByAuthor.has(commit.author)) {
-      firstCommitByAuthor.set(commit.author, commit.date)
+    const authorIndex = authors.findIndex((a) =>
+      a.emails.includes(commit.email)
+    )
+    console.log(`Author index: ${authorIndex}`)
+    if (!firstCommitByAuthor.has(authorIndex)) {
+      firstCommitByAuthor.set(authorIndex, commit.date)
     }
   }
+
   const newContributors = [...firstCommitByAuthor.values()].filter(
     (date) =>
       Temporal.Instant.compare(date, end) <= 0 &&
-      (days === undefined || isInPeriod(date, end, days))
+      (duration === undefined || isInPeriod(date, end, duration))
   ).length
-  return {
-    [`contributors_${suffix}`]: counts.size,
-    [`bus_factor_${suffix}`]: busFactor,
-    [`top_contributor_share_${suffix}`]: total ? (ordered[0] ?? 0) / total : 0,
-    [`new_contributor_rate_${suffix}`]: counts.size
-      ? newContributors / counts.size
-      : 0
-  }
+  const result = Object.create(null)
+  result[`contributors_${suffix}`] = authors.length
+  result[`bus_factor_${suffix}`] = busFactor
+  result[`top_contributor_share_${suffix}`] = normalizedDivide(
+    ordered[0] ?? 0,
+    total
+  )
+  result[`new_contributor_rate_${suffix}`] = normalizedDivide(
+    newContributors,
+    authors.length
+  )
+  return result
+}
+
+function normalizedDivide(numerator: number, denominator: number) {
+  return denominator !== 0 ? numerator / denominator : 0
 }
 
 function churn(commits: GitCommit[]) {
@@ -375,57 +410,31 @@ function churn(commits: GitCommit[]) {
   )
 }
 
-function averageInterval(commits: GitCommit[]) {
-  if (commits.length < 2) return null
-  return (
-    commits.reduce(
-      (total, commit, index) =>
-        index === 0
-          ? total
-          : total + elapsedDays(commits[index - 1].date, commit.date),
-      0
-    ) /
-    (commits.length - 1)
-  )
+function normalizedCovBetweenInstants(instants: Temporal.Instant[]) {
+  if (instants.length < 2) return 0
+  const durationsMillis = instants
+    .slice(1)
+    .map((instant, i) => instant.since(instants[i]).abs().milliseconds)
+  const mean =
+    durationsMillis.reduce((total, d) => total + d, 0) / durationsMillis.length
+  const variance =
+    durationsMillis.reduce((total, d) => total + Math.pow(d - mean, 2), 0) /
+    durationsMillis.length
+  return Math.sqrt(variance) / mean
 }
 
-function datesInPeriod(
-  dates: Temporal.Instant[],
-  end: Temporal.Instant,
-  days: number
-) {
-  return dates.filter((date) => isInPeriod(date, end, days))
-}
-
-function averageDateInterval(dates: Temporal.Instant[]) {
-  if (dates.length < 2) return null
-  return (
-    dates
-      .sort(Temporal.Instant.compare)
-      .reduce(
-        (total, date, index) =>
-          index === 0 ? total : total + elapsedDays(dates[index - 1], date),
-        0
-      ) /
-    (dates.length - 1)
-  )
-}
-
-async function readTagDates(git: ReturnType<typeof simpleGit>) {
-  const tags = (await git.raw(['tag', '--list'])).split('\n').filter(Boolean)
+async function readTagDates(git: SimpleGit) {
+  const tags = await git.tags()
   const dates = await Promise.all(
-    tags.map(async (tag) => {
-      const date = await git.raw(['log', '-1', '--format=%aI', tag])
-      return Temporal.Instant.from(date.trim())
+    tags.all.map(async (tag) => {
+      const log = await git.log(['-1', tag])
+      return Temporal.Instant.from(log.latest?.date ?? '')
     })
   )
   return dates
 }
 
-async function treeMetrics(
-  git: ReturnType<typeof simpleGit>,
-  hash: string | undefined
-) {
+async function treeMetrics(git: SimpleGit, hash: string | undefined) {
   if (!hash) return { loc: 0, file_count: 0 }
   const files = (await git.raw(['ls-tree', '-r', '--name-only', hash]))
     .split('\n')

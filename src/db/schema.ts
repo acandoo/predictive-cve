@@ -30,34 +30,47 @@ export const samples = sqliteTable(
       .notNull()
       .references(() => repos.url),
     cves_reported_365d: int(),
-
+    /* Coefficient of variation for inter-commit times */
     cov_inter_commit_90d: real(),
     cov_inter_commit_365d: real(),
     cov_inter_commit_all: real(),
+    /* Coefficient of variation for inter-tag times */
     cov_inter_tag_90d: real(),
     cov_inter_tag_365d: real(),
     cov_inter_tag_all: real(),
+    /* Number of contributors */
     contributors_90d: int(),
     contributors_365d: int(),
-    contributors_all: int(),
+    contributors_all: int().notNull(),
+    /* Number of commits */
     commits_90d: int(),
     commits_365d: int(),
-    commits_all: int(),
+    commits_all: int().notNull(),
+    /* Fewest authors who together made 50% of the commits */
     bus_factor_90d: int(),
     bus_factor_365d: int(),
-    bus_factor_all: int(),
+    bus_factor_all: int().notNull(),
+    /* Top author's commits divided by total commits */
     top_contributor_share_90d: real(),
     top_contributor_share_365d: real(),
-    top_contributor_share_all: real(),
+    top_contributor_share_all: real().notNull(),
+    /* Authors with no commit before the window start, divided by active authors */
     new_contributor_rate_90d: real(),
     new_contributor_rate_365d: real(),
-    new_contributor_rate_all: real(),
+    new_contributor_rate_all: real().notNull(),
+    /* Lines added plus deleted */
     churn_90d: real(),
     churn_365d: real(),
-    churn_all: real(),
-    repo_age_days: int(),
-    loc: int(),
-    file_count: int()
+    churn_all: real().notNull(),
+    /* Age of the repository in days */
+    repo_age_days: int().notNull(),
+    /* Lines of code */
+    loc: int().notNull(),
+    /* Number of files in the repository */
+    file_count: int().notNull(),
+    /* OpenSSF Scorecard metrics */
+    scorecard_binary_artifacts: real(),
+    scorecard_dangerous_workflow: real()
   },
   (t) => [uniqueIndex('sample_index').on(t.date_unix, t.repo_url)]
 )
