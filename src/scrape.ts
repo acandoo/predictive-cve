@@ -106,6 +106,7 @@ type GitCommit = {
   hash: string
   date: Temporal.Instant
   author: string
+  email: string
   insertions: number
   deletions: number
   files: number
@@ -164,12 +165,13 @@ async function readCommits(
     format: {
       hash: '%H',
       date: '%aI',
-      author: '%an'
+      author: '%an',
+      email: '%ae'
     }
   })
 
   return Promise.all(
-    output.all.map(async ({ hash, date, author }) => {
+    output.all.map(async ({ hash, date, author, email }) => {
       const { insertions, deletions, files } = await git.diffSummary([
         `${hash}^!`
       ])
@@ -177,6 +179,7 @@ async function readCommits(
         hash,
         date: Temporal.Instant.from(date),
         author,
+          email,
         insertions,
         deletions,
         files: files.length
