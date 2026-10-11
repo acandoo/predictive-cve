@@ -9,7 +9,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/index.ts",
-    "drizzle-kit": "drizzle-kit"
+    "drizzle-kit": "drizzle-kit",
+    "format": "oxfmt",
+    "lint": "oxlint"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
