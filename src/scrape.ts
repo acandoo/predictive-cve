@@ -66,10 +66,10 @@ export async function scrapeData(): Promise<void> {
             await logCve('validation')
           } else {
             await logCve('training')
-            if (!processedRepos.includes(source_code_location)) {
-              processedRepos.push(source_code_location)
-              await processGitRepo(db, octokit, source_code_location)
-            }
+          }
+          if (!processedRepos.includes(source_code_location)) {
+            processedRepos.push(source_code_location)
+            await processGitRepo(db, octokit, source_code_location)
           }
         })
     )
