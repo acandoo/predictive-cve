@@ -33,7 +33,7 @@ export async function scrapeData(): Promise<void> {
     octokit.rest.securityAdvisories.listGlobalAdvisories,
     {
       per_page: 100,
-      before: CUTOFF.toString()
+      published: `<=${CUTOFF}`
     }
   )) {
     await Promise.all(
@@ -92,7 +92,10 @@ async function processGitRepo(
     findRepoCves(octokit, repoUrl),
     readCommits(git, repoUrl, directory.path)
   ])
+  console.log(`Retrieved ${commits.length} commits for ${repoUrl}`)
   const sampleRows = await buildSampleRows(git, repoUrl, commits, repoCves)
+
+  console.log(`Sample rows for ${repoUrl}: ${JSON.stringify(sampleRows)}`)
 
   if (sampleRows.length > 0) {
     await db.insert(samples).values(sampleRows).onConflictDoNothing()
@@ -101,7 +104,7 @@ async function processGitRepo(
 
 type GitCommit = {
   hash: string
-  date: Date
+  date: Temporal.Instant
   author: string
   insertions: number
   deletions: number
@@ -109,8 +112,8 @@ type GitCommit = {
 }
 
 type TimePeriod = {
-  start: Date
-  end: Date
+  start: Temporal.Instant
+  end: Temporal.Instant
 }
 
 type SampleRow = typeof samples.$inferInsert
@@ -118,7 +121,7 @@ type SampleRow = typeof samples.$inferInsert
 async function findRepoCves(
   octokit: Octokit,
   repoUrl: string
-): Promise<Array<{ publishedAt: Date }>> {
+): Promise<Array<{ publishedAt: Temporal.Instant }>> {
   const { owner, repo } = parseGithubRepoUrl(repoUrl)
   const advisories = await octokit.paginate(
     octokit.rest.securityAdvisories.listRepositoryAdvisories,
@@ -136,12 +139,14 @@ async function findRepoCves(
         typeof advisory.cve_id === 'string' &&
         typeof advisory.published_at === 'string'
     )
-    .map(({ published_at }) => ({ publishedAt: new Date(published_at) }))
+    .map(({ published_at }) => ({
+      publishedAt: Temporal.Instant.from(published_at)
+    }))
 }
 
 function parseGithubRepoUrl(repoUrl: string): { owner: string; repo: string } {
   const url = new URL(repoUrl)
-  const [owner, repo] = url.pathname.split('/')
+  const [owner, repo] = url.pathname.split('/').filter(Boolean)
 
   return { owner, repo }
 }
@@ -170,7 +175,7 @@ async function readCommits(
       ])
       return {
         hash,
-        date: new Date(date),
+        date: Temporal.Instant.from(date),
         author,
         insertions,
         deletions,
@@ -184,28 +189,32 @@ async function buildSampleRows(
   git: SimpleGit,
   repoUrl: string,
   commits: GitCommit[],
-  repoCves: Array<{ publishedAt: Date }>
+  repoCves: Array<{ publishedAt: Temporal.Instant }>
 ): Promise<SampleRow[]> {
-  if (commits.length === 0) return []
+  if (commits.length === 0) throw Error(`No commits found for ${repoUrl}`)
   const durationMs = SAMPLE_DURATION.total({ unit: 'milliseconds' })
   const firstDate = commits[0].date
   const lastDate = commits.at(-1)!.date
   const sampleCount = Math.floor(
-    (lastDate.getTime() - firstDate.getTime()) / durationMs
+    firstDate.since(lastDate).total({ unit: 'milliseconds' }) / durationMs
   )
+  console.log(`Building ${sampleCount} sample rows for ${repoUrl}`)
   const tagDates = await readTagDates(git)
 
   return Promise.all(
     Array.from({ length: sampleCount }, (_, index) => {
-      const end = new Date(firstDate.getTime() + (index + 1) * durationMs)
+      const start = firstDate.add({ milliseconds: index * durationMs })
+      console.log(
+        `Building sample row for ${repoUrl} from ${start} to ${start.add({ milliseconds: durationMs })}`
+      )
       return buildSampleRow(
         git,
         repoUrl,
         commits,
         repoCves,
         {
-          start: new Date(end.getTime() - durationMs),
-          end
+          start,
+          end: start.add({ milliseconds: durationMs })
         },
         tagDates
       )
@@ -217,20 +226,26 @@ async function buildSampleRow(
   git: SimpleGit,
   repoUrl: string,
   commits: GitCommit[],
-  repoCves: Array<{ publishedAt: Date }>,
+  repoCves: Array<{ publishedAt: Temporal.Instant }>,
   period: TimePeriod,
-  tagDates: Date[]
+  tagDates: Temporal.Instant[]
 ): Promise<SampleRow> {
-  const allCommits = commits.filter((commit) => commit.date < period.end)
+  const allCommits = commits.filter(
+    (commit) => Temporal.Instant.compare(commit.date, period.end) < 0
+  )
   const commits90d = commitsInPeriod(commits, period.end, 90)
+  console.log(
+    `Filtered commits for repo ${repoUrl} for 90 days: ${commits90d.length}`
+  )
   const commits365d = commitsInPeriod(commits, period.end, 365)
+  console.log(
+    `Filtered commits for repo ${repoUrl} for 365 days: ${commits365d.length}`
+  )
   return {
-    date_unix: period.end,
+    date_unix: new Date(period.end.epochMilliseconds),
     repo_url: repoUrl,
-    cves_reported_365d: repoCves.filter(
-      ({ publishedAt }) =>
-        publishedAt.getTime() > period.end.getTime() - 365 * DAY_MS &&
-        publishedAt <= period.end
+    cves_reported_365d: repoCves.filter(({ publishedAt }) =>
+      isInPeriod(publishedAt, period.end, 365)
     ).length,
     ...contributorMetrics(commits90d, allCommits, period.end, 90, '90d'),
     ...contributorMetrics(commits365d, allCommits, period.end, 365, '365d'),
@@ -238,9 +253,7 @@ async function buildSampleRow(
     commits_90d: commits90d.length,
     commits_365d: commits365d.length,
     commits_all: allCommits.length,
-    repo_age_days: Math.floor(
-      (period.end.getTime() - commits[0].date.getTime()) / DAY_MS
-    ),
+    repo_age_days: Math.floor(elapsedDays(commits[0].date, period.end)),
     ...(await treeMetrics(git, allCommits.at(-1)?.hash)),
     cov_inter_commit_90d: averageInterval(commits90d),
     cov_inter_commit_365d: averageInterval(commits365d),
@@ -252,7 +265,7 @@ async function buildSampleRow(
       datesInPeriod(tagDates, period.end, 365)
     ),
     cov_inter_tag_all: averageDateInterval(
-      tagDates.filter((date) => date <= period.end)
+      tagDates.filter((date) => Temporal.Instant.compare(date, period.end) <= 0)
     ),
     churn_90d: churn(commits90d),
     churn_365d: churn(commits365d),
@@ -260,19 +273,37 @@ async function buildSampleRow(
   }
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function commitsInPeriod(commits: GitCommit[], end: Date, days: number) {
-  const start = end.getTime() - days * DAY_MS
-  return commits.filter(
-    ({ date }) => date.getTime() > start && date.getTime() <= end.getTime()
+function isInPeriod(
+  date: Temporal.Instant,
+  end: Temporal.Instant,
+  days: number
+): boolean {
+  const start = end.subtract({ hours: days * 24 })
+  return (
+    Temporal.Instant.compare(date, start) > 0 &&
+    Temporal.Instant.compare(date, end) <= 0
   )
+}
+
+function elapsedDays(
+  earlier: Temporal.Instant,
+  later: Temporal.Instant
+): number {
+  return later.since(earlier).total({ unit: 'days' })
+}
+
+function commitsInPeriod(
+  commits: GitCommit[],
+  end: Temporal.Instant,
+  days: number
+) {
+  return commits.filter(({ date }) => isInPeriod(date, end, days))
 }
 
 function contributorMetrics(
   commits: GitCommit[],
   allCommits: GitCommit[],
-  end: Date,
+  end: Temporal.Instant,
   days: number | undefined,
   suffix: '90d' | '365d' | 'all'
 ) {
@@ -287,7 +318,7 @@ function contributorMetrics(
   while (accumulated < total / 2 && busFactor < ordered.length) {
     accumulated += ordered[busFactor++]
   }
-  const firstCommitByAuthor = new Map<string, Date>()
+  const firstCommitByAuthor = new Map<string, Temporal.Instant>()
   for (const commit of allCommits) {
     if (!firstCommitByAuthor.has(commit.author)) {
       firstCommitByAuthor.set(commit.author, commit.date)
@@ -295,15 +326,14 @@ function contributorMetrics(
   }
   const newContributors = [...firstCommitByAuthor.values()].filter(
     (date) =>
-      date <= end &&
-      (days === undefined || date.getTime() > end.getTime() - days * DAY_MS)
+      Temporal.Instant.compare(date, end) <= 0 &&
+      (days === undefined || isInPeriod(date, end, days))
   ).length
-  const prefix = suffix === 'all' ? '' : `_${suffix}`
   return {
-    [`contributors${prefix}`]: counts.size,
-    [`bus_factor${prefix}`]: busFactor,
-    [`top_contributor_share${prefix}`]: total ? (ordered[0] ?? 0) / total : 0,
-    [`new_contributor_rate${prefix}`]: counts.size
+    [`contributors_${suffix}`]: counts.size,
+    [`bus_factor_${suffix}`]: busFactor,
+    [`top_contributor_share_${suffix}`]: total ? (ordered[0] ?? 0) / total : 0,
+    [`new_contributor_rate_${suffix}`]: counts.size
       ? newContributors / counts.size
       : 0
   }
@@ -323,35 +353,32 @@ function averageInterval(commits: GitCommit[]) {
       (total, commit, index) =>
         index === 0
           ? total
-          : total + commit.date.getTime() - commits[index - 1].date.getTime(),
+          : total + elapsedDays(commits[index - 1].date, commit.date),
       0
     ) /
-    (commits.length - 1) /
-    DAY_MS
+    (commits.length - 1)
   )
 }
 
-function datesInPeriod(dates: Date[], end: Date, days: number) {
-  const start = end.getTime() - days * DAY_MS
-  return dates.filter(
-    (date) => date.getTime() > start && date.getTime() <= end.getTime()
-  )
+function datesInPeriod(
+  dates: Temporal.Instant[],
+  end: Temporal.Instant,
+  days: number
+) {
+  return dates.filter((date) => isInPeriod(date, end, days))
 }
 
-function averageDateInterval(dates: Date[]) {
+function averageDateInterval(dates: Temporal.Instant[]) {
   if (dates.length < 2) return null
   return (
     dates
-      .sort((a, b) => a.getTime() - b.getTime())
+      .sort(Temporal.Instant.compare)
       .reduce(
         (total, date, index) =>
-          index === 0
-            ? total
-            : total + date.getTime() - dates[index - 1].getTime(),
+          index === 0 ? total : total + elapsedDays(dates[index - 1], date),
         0
       ) /
-    (dates.length - 1) /
-    DAY_MS
+    (dates.length - 1)
   )
 }
 
@@ -360,10 +387,10 @@ async function readTagDates(git: ReturnType<typeof simpleGit>) {
   const dates = await Promise.all(
     tags.map(async (tag) => {
       const date = await git.raw(['log', '-1', '--format=%aI', tag])
-      return new Date(date.trim())
+      return Temporal.Instant.from(date.trim())
     })
   )
-  return dates.filter((date) => !Number.isNaN(date.getTime()))
+  return dates
 }
 
 async function treeMetrics(
