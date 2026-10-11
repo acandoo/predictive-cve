@@ -1,0 +1,8 @@
+node_modules
+.git
+.github
+.env
+*.db
+*.db-*
+drizzle
+dist
