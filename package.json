@@ -8,7 +8,8 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node src/index.ts"
+    "start": "node src/index.ts",
+    "drizzle-kit": "drizzle-kit"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
