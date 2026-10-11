@@ -29,6 +29,14 @@ type GitHubAdvisory = Omit<Advisory, 'source_code_location' | 'cve_id'> & {
   cve_id: string
 }
 
+/**
+ * Scrape GitHub security advisories and repository history into the database.
+ *
+ * @remarks Advisory pagination is restricted to publications at or before
+ * `CUTOFF`. Repository processing assumes each source URL identifies a
+ * clonable GitHub repository and that the database and GitHub credentials are
+ * configured in the environment.
+ */
 export async function scrapeData(): Promise<void> {
   const processedRepos: string[] = []
   const db = drizzle(process.env.DB_FILE_NAME!)
@@ -88,6 +96,10 @@ export async function scrapeData(): Promise<void> {
  * @param db The database instance to use for storing the data.
  * @param octokit The Octokit instance to use for GitHub API calls.
  * @param repoUrl The URL of the Git repository to process.
+ * @remarks The repository is assumed to be available through both GitHub's
+ * API and Git clone. The commit history returned by `readCommits` is ordered
+ * oldest-to-newest and ends strictly before `CUTOFF`; downstream sampling
+ * depends on those assumptions.
  */
 async function processGitRepo(
   db: LibSQLDatabase<EmptyRelations>,
@@ -117,6 +129,17 @@ async function processGitRepo(
 
 type SampleRow = typeof samples.$inferInsert
 
+/**
+ * Find publication timestamps for CVEs associated with a repository.
+ *
+ * @param octokit The Octokit instance to use for GitHub API calls.
+ * @param repoUrl A GitHub repository URL that can be parsed into an owner and
+ * repository name.
+ * @returns CVE publication timestamps for advisories with both a CVE ID and a
+ * publication date.
+ * @remarks The returned timestamps are not sorted and are not filtered by
+ * `CUTOFF`; callers are responsible for applying time-window boundaries.
+ */
 async function findRepoCves(
   octokit: Octokit,
   repoUrl: string
@@ -144,11 +167,16 @@ async function findRepoCves(
 }
 
 /**
- * Get the commits for a given Git repository, ordered from oldest to newest.
+ * Get the commits for a given Git repository, ordered from oldest to newest
+ * and stopping at the cutoff date.
  * @param git The SimpleGit instance to use for the Git operations.
  * @param repoUrl The URL of the Git repository.
  * @param directory The directory to clone the repository into.
  * @returns A promise that resolves to an array of Git commits.
+ * @remarks The clone is assumed to contain the complete history. Only commits
+ * strictly earlier than `CUTOFF` are returned, so a commit exactly at the
+ * cutoff is excluded. Each returned commit is also assumed to have a usable
+ * parent for `git.diffSummary`.
  */
 async function readCommits(
   git: SimpleGit,
@@ -163,7 +191,6 @@ async function readCommits(
     format: {
       hash: '%H',
       date: '%aI',
-      author: '%an',
       email: '%ae'
     }
   })
@@ -195,9 +222,14 @@ async function readCommits(
  * Build a list of sample rows for a given Git repository.
  * @param git The SimpleGit instance to use for the Git operations.
  * @param repoUrl The URL of the Git repository.
- * @param commits A list of commits, ordered from oldest to newest.
- * @param repoCves A list of CVEs associated with the repository.
+ * @param commits A non-empty list of commits, ordered from oldest to newest
+ * and ending strictly before `CUTOFF`.
+ * @param repoCves A list of CVE publication timestamps associated with the
+ * repository; ordering is not required.
  * @returns A promise that resolves to an array of sample rows.
+ * @remarks The first and last commit dates define the sampling range. Only
+ * complete `SAMPLE_DURATION` windows are emitted; a remaining partial window
+ * is discarded.
  */
 async function buildSampleRows(
   git: SimpleGit,
@@ -206,11 +238,11 @@ async function buildSampleRows(
   repoCves: Array<{ publishedAt: Temporal.Instant }>
 ): Promise<SampleRow[]> {
   if (commits.length === 0) throw Error(`No commits found for ${repoUrl}`)
-  const durationMs = SAMPLE_DURATION.total({ unit: 'milliseconds' })
+  const durationMs = SAMPLE_DURATION.milliseconds
   const firstDate = commits[0].date
   const lastDate = commits.at(-1)!.date
   const sampleCount = Math.floor(
-    lastDate.since(firstDate).total({ unit: 'milliseconds' }) / durationMs
+    lastDate.since(firstDate).milliseconds / durationMs
   )
   console.log(`Building ${sampleCount} sample rows for ${repoUrl}`)
   const tagDates = await readTagDates(git)
@@ -235,6 +267,23 @@ async function buildSampleRows(
   )
 }
 
+/**
+ * Build metrics for one sampling period.
+ *
+ * @param git The SimpleGit instance used to inspect the repository tree.
+ * @param repoUrl The repository URL to store in the sample row.
+ * @param commits Commits ordered oldest-to-newest and ending strictly before
+ * `CUTOFF`.
+ * @param repoCves CVE publication timestamps; ordering is not required.
+ * @param period The sample interval, with an exclusive start and inclusive
+ * end for commit and CVE selection.
+ * @param tagDates Commit timestamps associated with tags; ordering is not
+ * required.
+ * @returns The metrics for the requested period.
+ * @remarks The commit list is assumed to contain the complete history needed
+ * for the period and to be non-empty. Its first commit supplies repository
+ * age, while its last commit before the period end supplies tree metrics.
+ */
 async function buildSampleRow(
   git: SimpleGit,
   repoUrl: string,
@@ -286,19 +335,15 @@ async function buildSampleRow(
       period.end.since(commits[0].date).total({ unit: 'days' })
     ),
     ...(await treeMetrics(git, allCommits.at(-1)?.hash)),
-    cov_inter_commit_90d: normalizedCovBetweenInstants(
-      commits90d.map((c) => c.date)
-    ),
-    cov_inter_commit_365d: normalizedCovBetweenInstants(
-      commits365d.map((c) => c.date)
-    ),
+    cov_inter_commit_90d: covBetweenInstants(commits90d.map((c) => c.date)),
+    cov_inter_commit_365d: covBetweenInstants(commits365d.map((c) => c.date)),
     cov_inter_commit_all: normalizedCovBetweenInstants(
       allCommits.map((c) => c.date)
     ),
-    cov_inter_tag_90d: normalizedCovBetweenInstants(
+    cov_inter_tag_90d: covBetweenInstants(
       tagDates.filter((date) => isInPeriod(date, period.end, DURATION_90D))
     ),
-    cov_inter_tag_365d: normalizedCovBetweenInstants(
+    cov_inter_tag_365d: covBetweenInstants(
       tagDates.filter((date) => isInPeriod(date, period.end, DURATION_365D))
     ),
     cov_inter_tag_all: normalizedCovBetweenInstants(
@@ -310,6 +355,15 @@ async function buildSampleRow(
   }
 }
 
+/**
+ * Test whether a timestamp lies in a trailing time window.
+ *
+ * @param date The timestamp to test.
+ * @param end The inclusive end of the window.
+ * @param duration The length of the window.
+ * @returns `true` when the timestamp is after `end - duration` and at or
+ * before `end`.
+ */
 function isInPeriod(
   date: Temporal.Instant,
   end: Temporal.Instant,
@@ -322,6 +376,21 @@ function isInPeriod(
   )
 }
 
+/**
+ * Calculate contributor and concentration metrics for a commit set.
+ *
+ * @param commits Commits in the requested window.
+ * @param allCommits All available commits used to find first contributions.
+ * @param end The inclusive end of the requested window.
+ * @param duration The window length, or `undefined` for all-time metrics.
+ * @param suffix The suffix used in the returned metric names.
+ * @returns Contributor count, bus factor, top-contributor share, and
+ * new-contributor rate.
+ * @remarks Authors are merged when their commit email addresses overlap.
+ * `allCommits` is assumed to be ordered oldest-to-newest so the first
+ * matching commit is each author's first commit. `commits` is assumed to be
+ * the corresponding subset of `allCommits`.
+ */
 function contributorMetrics<T extends '90d' | '365d' | 'all'>(
   commits: GitCommit[],
   allCommits: GitCommit[],
@@ -399,10 +468,23 @@ function contributorMetrics<T extends '90d' | '365d' | 'all'>(
   return result
 }
 
+/**
+ * Divide two numbers, treating a zero denominator as an empty result.
+ *
+ * @param numerator The value to divide.
+ * @param denominator The divisor.
+ * @returns The quotient, or `0` when the denominator is zero.
+ */
 function normalizedDivide(numerator: number, denominator: number) {
   return denominator !== 0 ? numerator / denominator : 0
 }
 
+/**
+ * Sum insertions and deletions across commits.
+ *
+ * @param commits Commits whose insertion and deletion counts are summed.
+ * @returns Total line churn.
+ */
 function churn(commits: GitCommit[]) {
   return commits.reduce(
     (total, commit) => total + commit.insertions + commit.deletions,
@@ -410,8 +492,30 @@ function churn(commits: GitCommit[]) {
   )
 }
 
+/**
+ * Calculate normalized timestamp variation, returning zero for fewer than two
+ * timestamps.
+ *
+ * @param instants Timestamps assumed to be ordered chronologically so adjacent
+ * values represent consecutive events.
+ * @returns The coefficient of variation of adjacent intervals, or `0` when
+ * fewer than two timestamps are supplied.
+ */
 function normalizedCovBetweenInstants(instants: Temporal.Instant[]) {
   if (instants.length < 2) return 0
+  return covBetweenInstants(instants)
+}
+
+/**
+ * Calculate the coefficient of variation of adjacent timestamp intervals.
+ *
+ * @param instants At least two timestamps, preferably ordered chronologically.
+ * @returns Standard deviation of adjacent interval lengths divided by their
+ * mean.
+ * @remarks Absolute differences prevent negative intervals, but meaningful
+ * inter-commit and inter-tag metrics still assume chronological input.
+ */
+function covBetweenInstants(instants: Temporal.Instant[]) {
   const durationsMillis = instants
     .slice(1)
     .map((instant, i) => instant.since(instants[i]).abs().milliseconds)
@@ -423,6 +527,15 @@ function normalizedCovBetweenInstants(instants: Temporal.Instant[]) {
   return Math.sqrt(variance) / mean
 }
 
+/**
+ * Read the commit dates associated with all repository tags.
+ *
+ * @param git The SimpleGit instance for the cloned repository.
+ * @returns One commit timestamp per tag.
+ * @remarks Tags are assumed to resolve to commits with parseable dates. The
+ * returned dates are not sorted and are not filtered by `CUTOFF`; callers
+ * apply the relevant period boundary.
+ */
 async function readTagDates(git: SimpleGit) {
   const tags = await git.tags()
   const dates = await Promise.all(
@@ -434,6 +547,16 @@ async function readTagDates(git: SimpleGit) {
   return dates
 }
 
+/**
+ * Measure the source tree at a repository commit.
+ *
+ * @param git The SimpleGit instance for the cloned repository.
+ * @param hash The commit to inspect, or `undefined` when no commit exists.
+ * @returns The line count and file count, or zeroes when `hash` is undefined.
+ * @remarks Files are assumed to be text readable by `git.show`. Files that
+ * cannot be read are omitted from the line count but remain in the file
+ * listing, matching the best-effort behavior of the implementation.
+ */
 async function treeMetrics(git: SimpleGit, hash: string | undefined) {
   if (!hash) return { loc: 0, file_count: 0 }
   const files = (await git.raw(['ls-tree', '-r', '--name-only', hash]))
