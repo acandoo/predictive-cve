@@ -234,9 +234,8 @@ async function buildSampleRows(
   return Promise.all(
     Array.from({ length: sampleCount }, (_, index) => {
       const start = firstDate.add({ milliseconds: index * durationMs })
-      console.log(
-        `Building sample row for ${repoUrl} from ${start} to ${start.add({ milliseconds: durationMs })}`
-      )
+      const end = start.add({ milliseconds: durationMs })
+      console.log(`Building sample row for ${repoUrl} from ${start} to ${end}`)
       return buildSampleRow(
         git,
         repoUrl,
@@ -244,7 +243,7 @@ async function buildSampleRows(
         repoCves,
         {
           start,
-          end: start.add({ milliseconds: durationMs })
+          end
         },
         tagDates
       )
