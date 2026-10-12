@@ -44,6 +44,7 @@ const execFileAsync = promisify(execFile)
 export async function scrapeData(): Promise<void> {
   const processedRepos: string[] = []
   const db = await initDrizzle()
+  if (!process.env.GITHUB_TOKEN) console.error('GITHUB_TOKEN is not set')
   const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN
   })
@@ -194,7 +195,7 @@ async function readCommits(
   directory: string
 ): Promise<GitCommit[]> {
   console.log(`Cloning ${repoUrl} into ${directory}`)
-  await clone(repoUrl, directory, ['--filter=blob:none'])
+  await clone(repoUrl, directory)
   console.log(`Cloned ${repoUrl} into ${directory}`)
 
   const output = await git.log({
