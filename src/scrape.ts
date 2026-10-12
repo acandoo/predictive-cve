@@ -349,9 +349,7 @@ async function buildSampleRow(
     commits_90d: commits90d.length,
     commits_365d: commits365d.length,
     commits_all: allCommits.length,
-    repo_age_days: Math.floor(
-      period.end.since(commits[0].date).total({ unit: 'days' })
-    ),
+    repo_age_days: Math.floor(period.end.since(commits[0].date).total('days')),
     ...(await treeMetrics(git, allCommits.at(-1)?.hash)),
     ...(await scorecardMetrics(directory, allCommits.at(-1)?.hash, repoUrl)),
     cov_inter_commit_90d: covBetweenInstants(commits90d.map((c) => c.date)),
