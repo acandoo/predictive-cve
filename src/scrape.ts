@@ -48,11 +48,11 @@ export async function scrapeData(): Promise<void> {
     auth: process.env.GITHUB_TOKEN
   })
 
-  for await (const response of await octokit.paginate.iterator(
+  for await (const response of octokit.paginate.iterator(
     octokit.rest.securityAdvisories.listGlobalAdvisories,
     {
       per_page: 100,
-      published: `<=${CUTOFF}`
+      published: `<=${CUTOFF.toString()}`
     }
   )) {
     await Promise.all(
@@ -263,7 +263,9 @@ async function buildSampleRows(
     Array.from({ length: sampleCount }, (_, index) => {
       const start = firstDate.add({ milliseconds: index * durationMs })
       const end = start.add({ milliseconds: durationMs })
-      console.log(`Building sample row for ${repoUrl} from ${start} to ${end}`)
+      console.log(
+        `Building sample row for ${repoUrl} from ${start.toString()} to ${end.toString()}`
+      )
       return buildSampleRow(
         git,
         directory,
