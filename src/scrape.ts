@@ -1,7 +1,9 @@
 import 'dotenv/config'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 import type { EmptyRelations } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
@@ -28,6 +30,8 @@ type GitHubAdvisory = Omit<Advisory, 'source_code_location' | 'cve_id'> & {
   source_code_location: `https://github.com/${string}`
   cve_id: string
 }
+
+const execFileAsync = promisify(execFile)
 
 /**
  * Scrape GitHub security advisories and repository history into the database.
@@ -118,7 +122,13 @@ async function processGitRepo(
     readCommits(git, repoUrl, directory.path)
   ])
   console.log(`Retrieved ${commits.length} commits for ${repoUrl}`)
-  const sampleRows = await buildSampleRows(git, repoUrl, commits, repoCves)
+  const sampleRows = await buildSampleRows(
+    git,
+    directory.path,
+    repoUrl,
+    commits,
+    repoCves
+  )
 
   console.log(`Sample rows for ${repoUrl}: ${JSON.stringify(sampleRows)}`)
 
@@ -221,6 +231,7 @@ async function readCommits(
 /**
  * Build a list of sample rows for a given Git repository.
  * @param git The SimpleGit instance to use for the Git operations.
+ * @param directory The directory containing the cloned repository.
  * @param repoUrl The URL of the Git repository.
  * @param commits A non-empty list of commits, ordered from oldest to newest
  * and ending strictly before `CUTOFF`.
@@ -233,6 +244,7 @@ async function readCommits(
  */
 async function buildSampleRows(
   git: SimpleGit,
+  directory: string,
   repoUrl: string,
   commits: GitCommit[],
   repoCves: Array<{ publishedAt: Temporal.Instant }>
@@ -254,6 +266,7 @@ async function buildSampleRows(
       console.log(`Building sample row for ${repoUrl} from ${start} to ${end}`)
       return buildSampleRow(
         git,
+        directory,
         repoUrl,
         commits,
         repoCves,
@@ -271,6 +284,7 @@ async function buildSampleRows(
  * Build metrics for one sampling period.
  *
  * @param git The SimpleGit instance used to inspect the repository tree.
+ * @param directory The directory containing the cloned repository.
  * @param repoUrl The repository URL to store in the sample row.
  * @param commits Commits ordered oldest-to-newest and ending strictly before
  * `CUTOFF`.
@@ -286,6 +300,7 @@ async function buildSampleRows(
  */
 async function buildSampleRow(
   git: SimpleGit,
+  directory: string,
   repoUrl: string,
   commits: GitCommit[],
   repoCves: Array<{ publishedAt: Temporal.Instant }>,
@@ -293,7 +308,7 @@ async function buildSampleRow(
   tagDates: Temporal.Instant[]
 ): Promise<SampleRow> {
   const allCommits = commits.filter(
-    (commit) => Temporal.Instant.compare(commit.date, period.end) < 0
+    (commit) => Temporal.Instant.compare(commit.date, period.end) <= 0
   )
   const commits90d = commits.filter(({ date }) =>
     isInPeriod(date, period.end, DURATION_90D)
@@ -335,6 +350,7 @@ async function buildSampleRow(
       period.end.since(commits[0].date).total({ unit: 'days' })
     ),
     ...(await treeMetrics(git, allCommits.at(-1)?.hash)),
+    ...(await scorecardMetrics(directory, allCommits.at(-1)?.hash, repoUrl)),
     cov_inter_commit_90d: covBetweenInstants(commits90d.map((c) => c.date)),
     cov_inter_commit_365d: covBetweenInstants(commits365d.map((c) => c.date)),
     cov_inter_commit_all: normalizedCovBetweenInstants(
@@ -352,6 +368,103 @@ async function buildSampleRow(
     churn_90d: churn(commits90d),
     churn_365d: churn(commits365d),
     churn_all: churn(allCommits)
+  }
+}
+
+type ScorecardCheck = {
+  name: string
+  score: number
+}
+
+type ScorecardResult = {
+  checks: ScorecardCheck[]
+}
+
+/**
+ * Run OpenSSF Scorecard against the commit selected for a sample period.
+ *
+ * @param directory The directory containing the cloned repository.
+ * @param hash The commit selected for the sample period, or `undefined` when
+ * no commit exists before the period end.
+ * @param repoUrl The repository URL, used to identify failures in logs.
+ * @returns The Scorecard check scores mapped to sample columns.
+ * @remarks Scorecard is expected to be available as `scorecard` on `PATH`, or
+ * at the path supplied by `SCORECARD_BINARY`. Checks that are not returned by
+ * Scorecard are stored as `null`.
+ */
+async function scorecardMetrics(
+  directory: string,
+  hash: string | undefined,
+  repoUrl: string
+): Promise<
+  Pick<
+    SampleRow,
+    | 'scorecard_binary_artifacts'
+    | 'scorecard_dangerous_workflow'
+    | 'scorecard_dependency_update_tool'
+    | 'scorecard_license'
+    | 'scorecard_pinned_dependencies'
+    | 'scorecard_permissions'
+    | 'scorecard_security_policy'
+  >
+> {
+  const emptyMetrics = {
+    scorecard_binary_artifacts: null,
+    scorecard_dangerous_workflow: null,
+    scorecard_dependency_update_tool: null,
+    scorecard_license: null,
+    scorecard_pinned_dependencies: null,
+    scorecard_permissions: null,
+    scorecard_security_policy: null
+  } as const
+  if (!hash) return emptyMetrics
+
+  const binary = process.env.SCORECARD_BINARY ?? 'scorecard'
+  let stdout: string
+  try {
+    ;({ stdout } = await execFileAsync(
+      binary,
+      [`--local=${directory}`, `--commit=${hash}`, '--format=json'],
+      { maxBuffer: /* 10 MB */ 10 * 1024 * 1024 }
+    ))
+  } catch (error) {
+    throw new Error(
+      `Scorecard failed for ${repoUrl} at commit ${hash} using ${binary}`,
+      { cause: error }
+    )
+  }
+
+  let result: ScorecardResult
+  try {
+    result = JSON.parse(stdout) as ScorecardResult
+  } catch (error) {
+    throw new Error(
+      `Scorecard returned invalid JSON for ${repoUrl} at commit ${hash}`,
+      { cause: error }
+    )
+  }
+  if (!Array.isArray(result.checks)) {
+    throw new Error(
+      `Scorecard returned no checks for ${repoUrl} at commit ${hash}`
+    )
+  }
+
+  const scores = new Map(
+    result.checks
+      .filter(
+        (check): check is ScorecardCheck =>
+          typeof check?.name === 'string' && typeof check?.score === 'number'
+      )
+      .map(({ name, score }) => [name, score])
+  )
+  return {
+    scorecard_binary_artifacts: scores.get('Binary-Artifacts'),
+    scorecard_dangerous_workflow: scores.get('Dangerous-Workflow'),
+    scorecard_dependency_update_tool: scores.get('Dependency-Update-Tool'),
+    scorecard_license: scores.get('License'),
+    scorecard_pinned_dependencies: scores.get('Pinned-Dependencies'),
+    scorecard_permissions: scores.get('Token-Permissions'),
+    scorecard_security_policy: scores.get('Security-Policy')
   }
 }
 
