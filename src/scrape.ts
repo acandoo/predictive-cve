@@ -428,7 +428,9 @@ function contributorMetrics<T extends '90d' | '365d' | 'all'>(
       })
     }
   }
-  console.log(`${authors.length} authors for ${suffix}`)
+  console.log(
+    `${authors.length} authors for ${suffix}: ${authors.map((a) => a.emails.join(', ')).join('; ')}`
+  )
 
   const ordered = authors.map((c) => c.commits).sort((a, b) => b - a)
   const total = commits.length
@@ -443,7 +445,12 @@ function contributorMetrics<T extends '90d' | '365d' | 'all'>(
     const authorIndex = authors.findIndex((a) =>
       a.emails.includes(commit.email)
     )
-    console.log(`Author index: ${authorIndex}`)
+    if (authorIndex === -1) {
+      console.error(
+        `Commit ${commit.hash} by <${commit.email}> has no matching author`
+      )
+      continue
+    }
     if (!firstCommitByAuthor.has(authorIndex)) {
       firstCommitByAuthor.set(authorIndex, commit.date)
     }
