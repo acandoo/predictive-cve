@@ -11,7 +11,8 @@
     "start": "node src/index.ts",
     "drizzle-kit": "drizzle-kit",
     "format": "oxfmt",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "prepare": "husky"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
@@ -27,10 +28,22 @@
     "@tsconfig/node26": "^26.0.1",
     "@types/node": "^26.6.5",
     "drizzle-kit": "1.0.0-rc.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
     "oxfmt": "^0.68.0",
     "oxlint": "^1.87.0",
     "oxlint-tsgolint": "^7.0.2004",
     "tsx": "^4.23.15"
+  },
+  "lint-staged": {
+    "*": [
+      "oxfmt --no-error-on-unmatched-pattern",
+      "oxlint --no-error-on-unmatched-pattern"
+    ],
+    "src/db/schema/**/*.ts": [
+      "bash -c 'npx drizzle-kit generate'",
+      "git add drizzle/"
+    ]
   },
   "devEngines": {
     "packageManager": {
