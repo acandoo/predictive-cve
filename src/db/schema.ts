@@ -31,6 +31,18 @@ export const samples = sqliteTable(
       .references(() => repos.url),
     /* Number of CVEs reported in the next 365 days */
     cves_reported_365d: int(),
+    /* CHAOSS: mean days from activity creation to first human response */
+    chaoss_time_to_first_response_90d: real(),
+    chaoss_time_to_first_response_365d: real(),
+    chaoss_time_to_first_response_all: real(),
+    /* CHAOSS: open change requests at period end divided by closed requests */
+    chaoss_change_request_closure_ratio_90d: real(),
+    chaoss_change_request_closure_ratio_365d: real(),
+    chaoss_change_request_closure_ratio_all: real(),
+    /* CHAOSS: number of releases published during the period */
+    chaoss_release_frequency_90d: int(),
+    chaoss_release_frequency_365d: int(),
+    chaoss_release_frequency_all: int(),
     /* Coefficient of variation for inter-commit times */
     cov_inter_commit_90d: real(),
     cov_inter_commit_365d: real(),
