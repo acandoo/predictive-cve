@@ -3,6 +3,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
+import { throttling } from '@octokit/plugin-throttling'
 import type { EmptyRelations } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import { Octokit } from 'octokit'
@@ -53,8 +54,23 @@ export async function scrapeData(): Promise<void> {
   const processedRepos: string[] = []
   const db = await initDrizzle()
   if (!process.env.GITHUB_TOKEN) console.error('GITHUB_TOKEN is not set')
-  const octokit = new Octokit({
-    auth: process.env.GITHUB_TOKEN
+  const octokitClass = Octokit.plugin(throttling)
+  const octokit = new octokitClass({
+    auth: process.env.GITHUB_TOKEN,
+    throttle: {
+      onRateLimit: (retryAfter, options, octokit) => {
+        octokit.log.warn(
+          `Request quota exhausted for request ${options.method} ${options.url}`
+        )
+        return true
+      },
+      onSecondaryRateLimit: (retryAfter, options, octokit) => {
+        octokit.log.warn(
+          `SecondaryRateLimit detected for request ${options.method} ${options.url}`
+        )
+        return true
+      }
+    }
   })
 
   for await (const response of octokit.paginate.iterator(
