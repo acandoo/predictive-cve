@@ -18,3 +18,17 @@ Common features:
 the OpenSSF scorecard, which covers repository best practices and security/CI infrastructure; CHAOSS metrics on project health, which cover contributor dynamics; and my own existing research into matching raw repository heuristics to manual labeling via clustering.
 
 Sampling repository multiple times?
+
+openssf scorecard metrics:
+
+entirely commit dependent:
+
+- Binary-Artifacts
+- Dangerous-Workflow
+- Dependency-Update-Tool
+- License
+- Pinned-Dependencies
+- Permissions
+- Security-Policy
+
+others cannot entirely track historically
