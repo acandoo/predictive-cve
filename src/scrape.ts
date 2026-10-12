@@ -524,7 +524,7 @@ function covBetweenInstants(instants: Temporal.Instant[]) {
   const variance =
     durationsMillis.reduce((total, d) => total + Math.pow(d - mean, 2), 0) /
     durationsMillis.length
-  return Math.sqrt(variance) / mean
+  return mean ? Math.sqrt(variance) / mean : 0
 }
 
 /**
@@ -533,8 +533,7 @@ function covBetweenInstants(instants: Temporal.Instant[]) {
  * @param git The SimpleGit instance for the cloned repository.
  * @returns One commit timestamp per tag.
  * @remarks Tags are assumed to resolve to commits with parseable dates. The
- * returned dates are not sorted and are not filtered by `CUTOFF`; callers
- * apply the relevant period boundary.
+ * returned dates are sorted and are filtered to exclude dates after `CUTOFF`.
  */
 async function readTagDates(git: SimpleGit) {
   const tags = await git.tags()
@@ -545,6 +544,8 @@ async function readTagDates(git: SimpleGit) {
     })
   )
   return dates
+    .sort((a, b) => Temporal.Instant.compare(a, b))
+    .filter((date) => Temporal.Instant.compare(date, CUTOFF) <= 0)
 }
 
 /**
