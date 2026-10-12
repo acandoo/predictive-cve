@@ -437,6 +437,8 @@ async function scorecardMetrics(
     )
   }
 
+  console.log(`Scorecard output for ${repoUrl} at commit ${hash}:\n${stdout}`)
+
   let result: ScorecardResult
   try {
     result = JSON.parse(stdout) as ScorecardResult
