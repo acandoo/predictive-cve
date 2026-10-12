@@ -404,20 +404,20 @@ async function scorecardMetrics(
     SampleRow,
     | 'scorecard_binary_artifacts'
     | 'scorecard_dangerous_workflow'
-    | 'scorecard_dependency_update_tool'
+    | 'scorecard_vulnerabilities'
     | 'scorecard_license'
     | 'scorecard_pinned_dependencies'
-    | 'scorecard_permissions'
+    | 'scorecard_token_permissions'
     | 'scorecard_security_policy'
   >
 > {
   const emptyMetrics = {
     scorecard_binary_artifacts: null,
     scorecard_dangerous_workflow: null,
-    scorecard_dependency_update_tool: null,
+    scorecard_vulnerabilities: null,
     scorecard_license: null,
     scorecard_pinned_dependencies: null,
-    scorecard_permissions: null,
+    scorecard_token_permissions: null,
     scorecard_security_policy: null
   } as const
   if (!hash) return emptyMetrics
@@ -436,8 +436,6 @@ async function scorecardMetrics(
       { cause: error }
     )
   }
-
-  console.log(`Scorecard output for ${repoUrl} at commit ${hash}:\n${stdout}`)
 
   let result: ScorecardResult
   try {
@@ -465,11 +463,11 @@ async function scorecardMetrics(
   return {
     scorecard_binary_artifacts: scores.get('Binary-Artifacts'),
     scorecard_dangerous_workflow: scores.get('Dangerous-Workflow'),
-    scorecard_dependency_update_tool: scores.get('Dependency-Update-Tool'),
     scorecard_license: scores.get('License'),
     scorecard_pinned_dependencies: scores.get('Pinned-Dependencies'),
-    scorecard_permissions: scores.get('Token-Permissions'),
-    scorecard_security_policy: scores.get('Security-Policy')
+    scorecard_security_policy: scores.get('Security-Policy'),
+    scorecard_token_permissions: scores.get('Token-Permissions'),
+    scorecard_vulnerabilities: scores.get('Vulnerabilities')
   }
 }
 
@@ -568,9 +566,9 @@ function contributorMetrics<T extends '90d' | '365d' | 'all'>(
       a.emails.includes(commit.email)
     )
     if (authorIndex === -1) {
-      console.error(
-        `Commit ${commit.hash} by <${commit.email}> has no matching author in period ${suffix}`
-      )
+      // console.error(
+      //   `Commit ${commit.hash} by <${commit.email}> has no matching author in period ${suffix}`
+      // )
       continue
     }
     if (!firstCommitByAuthor.has(authorIndex)) {

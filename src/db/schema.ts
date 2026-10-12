@@ -72,10 +72,10 @@ export const samples = sqliteTable(
     /* OpenSSF Scorecard metrics */
     scorecard_binary_artifacts: real(),
     scorecard_dangerous_workflow: real(),
-    scorecard_dependency_update_tool: real(),
+    scorecard_vulnerabilities: real(),
     scorecard_license: real(),
     scorecard_pinned_dependencies: real(),
-    scorecard_permissions: real(),
+    scorecard_token_permissions: real(),
     scorecard_security_policy: real()
   },
   (t) => [uniqueIndex('sample_index').on(t.date_unix, t.repo_url)]
