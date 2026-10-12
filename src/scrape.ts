@@ -5,7 +5,6 @@ import path from 'node:path'
 
 import type { EmptyRelations } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
-import { drizzle } from 'drizzle-orm/libsql'
 import { Octokit } from 'octokit'
 import { simpleGit } from 'simple-git'
 import type { SimpleGit } from 'simple-git'
@@ -18,6 +17,7 @@ import {
   DURATION_90D,
   SAMPLE_DURATION
 } from './lib/constants.ts'
+import { initDrizzle } from './lib/drizzle.ts'
 import { parseGithubRepoUrl } from './lib/github.ts'
 import type { GitCommit, TimePeriod } from './lib/types.ts'
 
@@ -39,7 +39,7 @@ type GitHubAdvisory = Omit<Advisory, 'source_code_location' | 'cve_id'> & {
  */
 export async function scrapeData(): Promise<void> {
   const processedRepos: string[] = []
-  const db = drizzle(process.env.DB_FILE_NAME!)
+  const db = await initDrizzle()
   const octokit = new Octokit({
     auth: process.env.GITHUB_TOKEN
   })
