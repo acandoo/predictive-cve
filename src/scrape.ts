@@ -440,14 +440,18 @@ function contributorMetrics<T extends '90d' | '365d' | 'all'>(
     accumulated += ordered[busFactor++]
   }
 
+  // To find first-time contributions, we need to iterate through all commits
+  // before and through the window, and record the first commit for each author.
   const firstCommitByAuthor = new Map<number, Temporal.Instant>()
-  for (const commit of allCommits) {
+  for (const commit of allCommits.filter(
+    ({ date }) => Temporal.Instant.compare(date, end) <= 0
+  )) {
     const authorIndex = authors.findIndex((a) =>
       a.emails.includes(commit.email)
     )
     if (authorIndex === -1) {
       console.error(
-        `Commit ${commit.hash} by <${commit.email}> has no matching author`
+        `Commit ${commit.hash} by <${commit.email}> has no matching author in period ${suffix}`
       )
       continue
     }
