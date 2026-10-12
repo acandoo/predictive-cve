@@ -1,0 +1,546 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "id": "39a8f526-1fab-494b-b597-750f0921c6f9",
+  "prevIds": ["6f90994d-fa51-449d-972f-ef40c24b8c04"],
+  "ddl": [
+    {
+      "name": "cves",
+      "entityType": "tables"
+    },
+    {
+      "name": "repos",
+      "entityType": "tables"
+    },
+    {
+      "name": "samples",
+      "entityType": "tables"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "cves"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cve_id",
+      "entityType": "columns",
+      "table": "cves"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "published_at",
+      "entityType": "columns",
+      "table": "cves"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "repo_url",
+      "entityType": "columns",
+      "table": "cves"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "repos"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "url",
+      "entityType": "columns",
+      "table": "repos"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "bucket",
+      "entityType": "columns",
+      "table": "repos"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": true,
+      "default": null,
+      "generated": null,
+      "name": "id",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "date_unix",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "repo_url",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cves_reported_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cov_inter_commit_90d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cov_inter_commit_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cov_inter_commit_all",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cov_inter_tag_90d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cov_inter_tag_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "cov_inter_tag_all",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "contributors_90d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "contributors_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "contributors_all",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "commits_90d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "commits_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "commits_all",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "bus_factor_90d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "bus_factor_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "bus_factor_all",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "top_contributor_share_90d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "top_contributor_share_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "top_contributor_share_all",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "new_contributor_rate_90d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "new_contributor_rate_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "new_contributor_rate_all",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "churn_90d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "churn_365d",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "churn_all",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "repo_age_days",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "loc",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "file_count",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scorecard_binary_artifacts",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scorecard_dangerous_workflow",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scorecard_dependency_update_tool",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scorecard_license",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scorecard_pinned_dependencies",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scorecard_permissions",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "type": "real",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "scorecard_security_policy",
+      "entityType": "columns",
+      "table": "samples"
+    },
+    {
+      "columns": ["repo_url"],
+      "tableTo": "repos",
+      "columnsTo": ["url"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_cves_repo_url_repos_url_fk",
+      "entityType": "fks",
+      "table": "cves"
+    },
+    {
+      "columns": ["repo_url"],
+      "tableTo": "repos",
+      "columnsTo": ["url"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "nameExplicit": false,
+      "name": "fk_samples_repo_url_repos_url_fk",
+      "entityType": "fks",
+      "table": "samples"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "cves_pk",
+      "table": "cves",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "repos_pk",
+      "table": "repos",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "samples_pk",
+      "table": "samples",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        {
+          "value": "date_unix",
+          "isExpression": false
+        },
+        {
+          "value": "repo_url",
+          "isExpression": false
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "origin": "manual",
+      "name": "sample_index",
+      "entityType": "indexes",
+      "table": "samples"
+    },
+    {
+      "columns": ["cve_id"],
+      "nameExplicit": false,
+      "name": "cves_cve_id_unique",
+      "entityType": "uniques",
+      "table": "cves"
+    },
+    {
+      "columns": ["url"],
+      "nameExplicit": false,
+      "name": "repos_url_unique",
+      "entityType": "uniques",
+      "table": "repos"
+    }
+  ],
+  "renames": []
+}

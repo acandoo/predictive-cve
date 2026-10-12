@@ -29,6 +29,7 @@ export const samples = sqliteTable(
     repo_url: text()
       .notNull()
       .references(() => repos.url),
+    /* Number of CVEs reported in the next 365 days */
     cves_reported_365d: int(),
     /* Coefficient of variation for inter-commit times */
     cov_inter_commit_90d: real(),
@@ -70,7 +71,12 @@ export const samples = sqliteTable(
     file_count: int().notNull(),
     /* OpenSSF Scorecard metrics */
     scorecard_binary_artifacts: real(),
-    scorecard_dangerous_workflow: real()
+    scorecard_dangerous_workflow: real(),
+    scorecard_dependency_update_tool: real(),
+    scorecard_license: real(),
+    scorecard_pinned_dependencies: real(),
+    scorecard_permissions: real(),
+    scorecard_security_policy: real()
   },
   (t) => [uniqueIndex('sample_index').on(t.date_unix, t.repo_url)]
 )
