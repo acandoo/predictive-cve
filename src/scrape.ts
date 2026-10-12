@@ -238,11 +238,11 @@ async function buildSampleRows(
   repoCves: Array<{ publishedAt: Temporal.Instant }>
 ): Promise<SampleRow[]> {
   if (commits.length === 0) throw Error(`No commits found for ${repoUrl}`)
-  const durationMs = SAMPLE_DURATION.milliseconds
+  const durationMs = SAMPLE_DURATION.total('milliseconds')
   const firstDate = commits[0].date
   const lastDate = commits.at(-1)!.date
   const sampleCount = Math.floor(
-    lastDate.since(firstDate).milliseconds / durationMs
+    lastDate.since(firstDate).total('milliseconds') / durationMs
   )
   console.log(`Building ${sampleCount} sample rows for ${repoUrl}`)
   const tagDates = await readTagDates(git)
@@ -518,7 +518,7 @@ function normalizedCovBetweenInstants(instants: Temporal.Instant[]) {
 function covBetweenInstants(instants: Temporal.Instant[]) {
   const durationsMillis = instants
     .slice(1)
-    .map((instant, i) => instant.since(instants[i]).abs().milliseconds)
+    .map((instant, i) => instant.since(instants[i]).abs().total('milliseconds'))
   const mean =
     durationsMillis.reduce((total, d) => total + d, 0) / durationsMillis.length
   const variance =
