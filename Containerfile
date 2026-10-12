@@ -1,5 +1,7 @@
 FROM ghcr.io/pnpm/pnpm:12
 
+COPY --from=ghcr.io/ossf/scorecard:latest /ko-app/v5 /usr/local/bin/scorecard
+
 ENV NODE_ENV=production
 ENV DB_FILE_NAME=file:/data/predictive-cve.db
 
