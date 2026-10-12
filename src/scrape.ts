@@ -311,7 +311,7 @@ async function buildSampleRow(
     date_unix: new Date(period.end.epochMilliseconds),
     repo_url: repoUrl,
     cves_reported_365d: repoCves.filter(({ publishedAt }) =>
-      isInPeriod(publishedAt, period.end, DURATION_365D)
+      isInPeriod(publishedAt, period.end.add(DURATION_365D), DURATION_365D)
     ).length,
     ...contributorMetrics(
       commits90d,
