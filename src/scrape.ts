@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { throttling } from '@octokit/plugin-throttling'
+import { eq } from 'drizzle-orm'
 import type { EmptyRelations } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import { Octokit } from 'octokit'
@@ -51,7 +52,7 @@ type GitHubAdvisory = Omit<Advisory, 'source_code_location' | 'cve_id'> & {
  * configured in the environment.
  */
 export async function scrapeData(): Promise<void> {
-  const processedRepos: string[] = []
+  const processedRepos = new Set<string>()
   const db = await initDrizzle()
   if (!process.env.GITHUB_TOKEN) console.error('GITHUB_TOKEN is not set')
   const octokitClass = Octokit.plugin(throttling)
@@ -111,8 +112,19 @@ export async function scrapeData(): Promise<void> {
           } else {
             await logCve('training')
           }
-          if (!processedRepos.includes(source_code_location)) {
-            processedRepos.push(source_code_location)
+          if (!processedRepos.has(source_code_location)) {
+            processedRepos.add(source_code_location)
+            const existingSamples = await db
+              .select({ id: samples.id })
+              .from(samples)
+              .where(eq(samples.repo_url, source_code_location))
+              .limit(1)
+            if (existingSamples.length > 0) {
+              console.log(
+                `Skipping ${source_code_location}; samples already collected`
+              )
+              return
+            }
             await processGitRepo(db, octokit, source_code_location)
           }
         })
