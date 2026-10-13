@@ -1,0 +1,13 @@
+services:
+  predictive-cve:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: predictive-cve
+    container_name: predictive-cve
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data

@@ -9,8 +9,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/index.ts",
-    "build:docker": "docker build -t predictive-cve .",
-    "start:docker": "./run-docker.sh",
+    "build:docker": "docker compose build",
+    "dev:docker": "docker compose run --rm predictive-cve",
+    "start:docker": "docker compose run --detach predictive-cve",
     "drizzle-kit": "drizzle-kit",
     "format": "oxfmt",
     "lint": "oxlint",
