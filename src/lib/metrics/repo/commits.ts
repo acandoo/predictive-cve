@@ -1,8 +1,8 @@
 import type { SimpleGit } from 'simple-git'
 
-import type { GitCommit } from '../..//types.ts'
 import { clone } from '../../helpers/cloner.ts'
 import { CUTOFF } from '../../helpers/constants.ts'
+import type { GitCommit } from '../../types.ts'
 
 /**
  * Get the commits for a given Git repository, ordered from oldest to newest
