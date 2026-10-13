@@ -29,5 +29,5 @@ export async function readAuthors(commits: GitCommit[]): Promise<GitAuthor[]> {
       authors.delete(key)
     }
   }
-  return Object.values(authors)
+  return [...authors.values()]
 }

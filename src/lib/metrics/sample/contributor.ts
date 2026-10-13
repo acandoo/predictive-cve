@@ -14,15 +14,11 @@ import type { GitCommit } from '../../types.ts'
  * @param suffix The suffix used in the returned metric names.
  * @returns Contributor count, bus factor, top-contributor share, and
  * new-contributor rate.
- * @remarks Authors are merged when their commit email addresses overlap.
- * `allCommits` is assumed to be ordered oldest-to-newest so the first
- * matching commit is each author's first commit. `commits` is assumed to be
- * the corresponding subset of `allCommits`.
  */
 export function contributorMetrics<T extends '90d' | '365d' | 'all'>(
   commits: GitCommit[],
   allCommits: GitCommit[],
-  authors: GitAuthor[],
+  allAuthors: GitAuthor[],
   end: Temporal.Instant,
   duration: Temporal.Duration | undefined,
   suffix: T
@@ -35,6 +31,12 @@ export function contributorMetrics<T extends '90d' | '365d' | 'all'>(
       | `new_contributor_rate_${T}`
   ]: number
 } {
+  const authors = allAuthors.filter(({ names, emails }) =>
+    commits.some(
+      (commit) => emails.includes(commit.email) || names.includes(commit.name)
+    )
+  )
+  console.log(`Filtered authors: ${authors.length}`)
   const ordered = authors
     .map(
       ({ names, emails }) =>
@@ -47,10 +49,15 @@ export function contributorMetrics<T extends '90d' | '365d' | 'all'>(
     .sort((a, b) => b - a)
   const total = commits.length
   let accumulated = 0
+  /** Number of authors contributing at least half of the total commits */
   let busFactor = 0
+  console.log(`Total commits: ${total}, Ordered: ${ordered.length}`)
   while (accumulated < total / 2 && busFactor < ordered.length) {
     accumulated += ordered[busFactor++]
   }
+  console.log(
+    `Accumulated: ${accumulated}, Total: ${total}, Bus Factor: ${busFactor}`
+  )
 
   // To find first-time contributions, we need to iterate through all commits
   // before and through the window, and record the first commit for each author.

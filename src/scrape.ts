@@ -268,6 +268,7 @@ async function buildSampleRow(
   // as deduplication logic is only ran historically at sample time;
   // future merges are not evident from the present
   const authors = await readAuthors(allCommits)
+  console.log(`Authors for repo ${repoUrl}: ${authors.length}`)
   const commits90d = commits.filter(({ date }) =>
     isInPeriod(date, period.end, DURATION_90D)
   )
