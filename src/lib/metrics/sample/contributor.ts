@@ -1,3 +1,4 @@
+import type { GitAuthor } from '../../helpers/authors.ts'
 import { normalizedDivide } from '../../helpers/math.ts'
 import { isInPeriod } from '../../helpers/math.ts'
 import type { GitCommit } from '../../types.ts'
@@ -6,7 +7,8 @@ import type { GitCommit } from '../../types.ts'
  * Calculate contributor and concentration metrics for a commit set.
  *
  * @param commits Commits in the requested window.
- * @param allCommits All available commits used to find first contributions.
+ * @param allCommits All available commits up to window end used to find first contributions.
+ * @param authors The total list of authors.
  * @param end The inclusive end of the requested window.
  * @param duration The window length, or `undefined` for all-time metrics.
  * @param suffix The suffix used in the returned metric names.
@@ -20,6 +22,7 @@ import type { GitCommit } from '../../types.ts'
 export function contributorMetrics<T extends '90d' | '365d' | 'all'>(
   commits: GitCommit[],
   allCommits: GitCommit[],
+  authors: GitAuthor[],
   end: Temporal.Instant,
   duration: Temporal.Duration | undefined,
   suffix: T
@@ -32,41 +35,16 @@ export function contributorMetrics<T extends '90d' | '365d' | 'all'>(
       | `new_contributor_rate_${T}`
   ]: number
 } {
-  const authors: Array<{
-    names: string[]
-    emails: string[]
-    commits: number
-  }> = []
-  // this logic assumes that no two authors in a repo have the same name or email
-  // from previous experience, it's not uncommon for authors to have multiple names or emails
-  // so we deduplicate that here.
-  for (const { name, email } of commits) {
-    const existing = [
-      ...authors
-        .filter((c) => c.emails.includes(email) || c.names.includes(name))
-        .entries()
-    ]
-    if (existing.length > 0) {
-      const [first, ...rest] = existing
-      first[1].commits += rest.reduce((total, [, c]) => total + c.commits, 0)
-      first[1].emails.push(...rest.flatMap(([, c]) => c.emails))
-      first[1].names.push(...rest.flatMap(([, c]) => c.names))
-      for (const [index] of rest) {
-        authors.splice(index, 1)
-      }
-    } else {
-      authors.push({
-        names: [name],
-        emails: [email],
-        commits: 1
-      })
-    }
-  }
-  console.log(
-    `${authors.length} authors for ${suffix}: ${authors.map((a) => a.emails.join(', ')).join('; ')}`
-  )
-
-  const ordered = authors.map((c) => c.commits).sort((a, b) => b - a)
+  const ordered = authors
+    .map(
+      ({ names, emails }) =>
+        commits.filter(
+          (commit) =>
+            emails.includes(commit.email) || names.includes(commit.name)
+        ).length
+    )
+    .filter((count) => count > 0)
+    .sort((a, b) => b - a)
   const total = commits.length
   let accumulated = 0
   let busFactor = 0
@@ -77,9 +55,7 @@ export function contributorMetrics<T extends '90d' | '365d' | 'all'>(
   // To find first-time contributions, we need to iterate through all commits
   // before and through the window, and record the first commit for each author.
   const firstCommitByAuthor = new Map<number, Temporal.Instant>()
-  for (const commit of allCommits.filter(
-    ({ date }) => Temporal.Instant.compare(date, end) <= 0
-  )) {
+  for (const commit of allCommits) {
     const authorIndex = authors.findIndex((a) =>
       a.emails.includes(commit.email)
     )

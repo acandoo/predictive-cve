@@ -12,6 +12,7 @@ import { simpleGit } from 'simple-git'
 import type { SimpleGit } from 'simple-git'
 
 import { repos, cves, samples } from './db/schema.ts'
+import { readAuthors } from './lib/helpers/authors.ts'
 import {
   CUTOFF,
   DURATION_365D,
@@ -263,6 +264,10 @@ async function buildSampleRow(
   const allCommits = commits.filter(
     (commit) => Temporal.Instant.compare(commit.date, period.end) <= 0
   )
+  // Authors are inferred per sample rather than globally
+  // as deduplication logic is only ran historically at sample time;
+  // future merges are not evident from the present
+  const authors = await readAuthors(allCommits)
   const commits90d = commits.filter(({ date }) =>
     isInPeriod(date, period.end, DURATION_90D)
   )
@@ -299,6 +304,7 @@ async function buildSampleRow(
     ...contributorMetrics(
       commits90d,
       allCommits,
+      authors,
       period.end,
       DURATION_90D,
       '90d'
@@ -306,11 +312,19 @@ async function buildSampleRow(
     ...contributorMetrics(
       commits365d,
       allCommits,
+      authors,
       period.end,
       DURATION_365D,
       '365d'
     ),
-    ...contributorMetrics(allCommits, allCommits, period.end, undefined, 'all'),
+    ...contributorMetrics(
+      allCommits,
+      allCommits,
+      authors,
+      period.end,
+      undefined,
+      'all'
+    ),
     commits_90d: commits90d.length,
     commits_365d: commits365d.length,
     commits_all: allCommits.length,
