@@ -36,11 +36,8 @@ export async function readCommits(
 
   return Promise.all(
     output.all
-      .filter(
-        ({ date }) =>
-          Temporal.Instant.compare(Temporal.Instant.from(date), CUTOFF) === -1
-      )
-      .reverse()
+      .filter(({ date }) => Temporal.Instant.compare(date, CUTOFF) === -1)
+      .sort((a, b) => Temporal.Instant.compare(a.date, b.date))
       .map(async ({ name, hash, date, email }) => {
         const { insertions, deletions, files } = await git.diffSummary([
           `${hash}^!`
