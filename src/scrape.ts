@@ -28,9 +28,6 @@ import {
 import { readTagDates } from './lib/helpers/repo.ts'
 import { readCommits } from './lib/metrics/repo/commits.ts'
 import { findRepoCves } from './lib/metrics/repo/cve.ts'
-import type { GithubMetrics } from './lib/metrics/repo/github.ts'
-import { findGithubMetrics } from './lib/metrics/repo/github.ts'
-import { chaossMetrics } from './lib/metrics/sample/chaoss.ts'
 import { contributorMetrics } from './lib/metrics/sample/contributor.ts'
 import { scorecardMetrics } from './lib/metrics/sample/scorecard.ts'
 import { treeMetrics } from './lib/metrics/sample/tree.ts'
@@ -155,10 +152,9 @@ async function processGitRepo(
     maxConcurrentProcesses: os.availableParallelism()
   })
 
-  const [repoCves, commits, githubMetrics] = await Promise.all([
+  const [repoCves, commits] = await Promise.all([
     findRepoCves(octokit, repoUrl),
-    readCommits(git, repoUrl, directory.path),
-    findGithubMetrics(octokit, repoUrl)
+    readCommits(git, repoUrl, directory.path)
   ])
   console.log(`Retrieved ${commits.length} commits for ${repoUrl}`)
   const sampleRows = await buildSampleRows(
@@ -166,8 +162,7 @@ async function processGitRepo(
     directory.path,
     repoUrl,
     commits,
-    repoCves,
-    githubMetrics
+    repoCves
   )
 
   console.log(`Sample rows for ${repoUrl}: ${JSON.stringify(sampleRows)}`)
@@ -196,8 +191,7 @@ async function buildSampleRows(
   directory: string,
   repoUrl: string,
   commits: GitCommit[],
-  repoCves: Array<{ publishedAt: Temporal.Instant }>,
-  githubMetrics: GithubMetrics
+  repoCves: Array<{ publishedAt: Temporal.Instant }>
 ): Promise<SampleRow[]> {
   if (commits.length === 0) throw Error(`No commits found for ${repoUrl}`)
   const durationMs = SAMPLE_DURATION.total('milliseconds')
@@ -222,7 +216,6 @@ async function buildSampleRows(
         repoUrl,
         commits,
         repoCves,
-        githubMetrics,
         {
           start,
           end
@@ -257,7 +250,6 @@ async function buildSampleRow(
   repoUrl: string,
   commits: GitCommit[],
   repoCves: Array<{ publishedAt: Temporal.Instant }>,
-  githubMetrics: GithubMetrics,
   period: TimePeriod,
   tagDates: Temporal.Instant[]
 ): Promise<SampleRow> {
@@ -287,21 +279,6 @@ async function buildSampleRow(
     cves_reported_365d: repoCves.filter(({ publishedAt }) =>
       isInPeriod(publishedAt, period.end.add(DURATION_365D), DURATION_365D)
     ).length,
-    ...chaossMetrics(
-      githubMetrics,
-      commits90d,
-      period.end,
-      DURATION_90D,
-      '90d'
-    ),
-    ...chaossMetrics(
-      githubMetrics,
-      commits365d,
-      period.end,
-      DURATION_365D,
-      '365d'
-    ),
-    ...chaossMetrics(githubMetrics, allCommits, period.end, undefined, 'all'),
     ...contributorMetrics(
       commits90d,
       allCommits,
