@@ -1,0 +1,21 @@
+exports[`findGithubMetrics paginates and returns filtered activities and releases 1`] = `
+{
+  "activities": [
+    {
+      "openedAt": "2025-01-01T00:00:00Z",
+      "firstResponseAt": "2025-01-01T01:00:00Z",
+      "closedAt": "2025-01-03T00:00:00Z",
+      "isChangeRequest": false
+    },
+    {
+      "openedAt": "2025-01-02T00:00:00Z",
+      "firstResponseAt": "2025-01-02T02:00:00Z",
+      "isChangeRequest": true
+    }
+  ],
+  "releases": [
+    "2025-02-01T00:00:00Z",
+    "2025-03-01T00:00:00Z"
+  ]
+}
+`;
