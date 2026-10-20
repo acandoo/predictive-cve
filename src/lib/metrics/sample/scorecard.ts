@@ -1,4 +1,5 @@
 import { execFile } from 'child_process'
+import type { ExecException } from 'child_process'
 import { promisify } from 'util'
 
 import type { SampleRow } from '../../types.ts'
@@ -60,10 +61,11 @@ export async function scorecardMetrics(
       { maxBuffer: /* 10 MB */ 10 * 1024 * 1024 }
     ))
   } catch (error) {
-    throw new Error(
+    console.error(
       `Scorecard failed for ${repoUrl} at commit ${hash} using ${binary}`,
       { cause: error }
     )
+    stdout = (error as ExecException).stdout as string
   }
 
   let result: ScorecardResult
