@@ -1,10 +1,11 @@
 services:
-  predictive-cve:
+  scraper:
     build:
       context: .
       dockerfile: Dockerfile
     image: predictive-cve
-    container_name: predictive-cve
+    command: scrape
+    container_name: predictive-cve-scraper
     restart: unless-stopped
     init: true
     env_file:
