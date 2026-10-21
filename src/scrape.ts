@@ -79,54 +79,53 @@ export async function scrapeData(): Promise<void> {
       published: `<=${CUTOFF.toString()}`
     }
   )) {
-    await Promise.all(
-      response.data
-        .filter(
-          (advisory): advisory is GitHubAdvisory =>
-            !!advisory.source_code_location?.startsWith(
-              'https://github.com/'
-            ) && typeof advisory.cve_id === 'string'
-        )
-        .map(async ({ source_code_location, cve_id, published_at }) => {
-          const random = Math.random()
-          const logCve = async (bucket: 'training' | 'validation' | 'test') => {
-            await db
-              .insert(repos)
-              .values({ bucket, url: source_code_location })
-              .onConflictDoNothing()
-            await db
-              .insert(cves)
-              .values({
-                cve_id,
-                published_at: new Date(published_at),
-                repo_url: source_code_location
-              })
-              .onConflictDoNothing()
-          }
-          if (random > 0.8) {
-            await logCve('test')
-          } else if (random > 0.7) {
-            await logCve('validation')
-          } else {
-            await logCve('training')
-          }
-          if (!processedRepos.has(source_code_location)) {
-            processedRepos.add(source_code_location)
-            const existingSamples = await db
-              .select({ id: samples.id })
-              .from(samples)
-              .where(eq(samples.repo_url, source_code_location))
-              .limit(1)
-            if (existingSamples.length > 0) {
-              console.log(
-                `Skipping ${source_code_location}; samples already collected`
-              )
-              return
-            }
-            await processGitRepo(db, octokit, source_code_location)
-          }
-        })
-    )
+    for (const {
+      source_code_location,
+      cve_id,
+      published_at
+    } of response.data.filter(
+      (advisory): advisory is GitHubAdvisory =>
+        !!advisory.source_code_location?.startsWith('https://github.com/') &&
+        typeof advisory.cve_id === 'string'
+    )) {
+      const random = Math.random()
+      const logCve = async (bucket: 'training' | 'validation' | 'test') => {
+        await db
+          .insert(repos)
+          .values({ bucket, url: source_code_location })
+          .onConflictDoNothing()
+        await db
+          .insert(cves)
+          .values({
+            cve_id,
+            published_at: new Date(published_at),
+            repo_url: source_code_location
+          })
+          .onConflictDoNothing()
+      }
+      if (random > 0.8) {
+        await logCve('test')
+      } else if (random > 0.7) {
+        await logCve('validation')
+      } else {
+        await logCve('training')
+      }
+      if (!processedRepos.has(source_code_location)) {
+        processedRepos.add(source_code_location)
+        const existingSamples = await db
+          .select({ id: samples.id })
+          .from(samples)
+          .where(eq(samples.repo_url, source_code_location))
+          .limit(1)
+        if (existingSamples.length > 0) {
+          console.log(
+            `Skipping ${source_code_location}; samples already collected`
+          )
+          continue
+        }
+        await processGitRepo(db, octokit, source_code_location)
+      }
+    }
   }
 }
 
