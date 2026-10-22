@@ -88,28 +88,6 @@ export async function scrapeData(): Promise<void> {
         !!advisory.source_code_location?.startsWith('https://github.com/') &&
         typeof advisory.cve_id === 'string'
     )) {
-      const random = Math.random()
-      const logCve = async (bucket: 'training' | 'validation' | 'test') => {
-        await db
-          .insert(repos)
-          .values({ bucket, url: source_code_location })
-          .onConflictDoNothing()
-        await db
-          .insert(cves)
-          .values({
-            cve_id,
-            published_at: new Date(published_at),
-            repo_url: source_code_location
-          })
-          .onConflictDoNothing()
-      }
-      if (random > 0.8) {
-        await logCve('test')
-      } else if (random > 0.7) {
-        await logCve('validation')
-      } else {
-        await logCve('training')
-      }
       if (!processedRepos.has(source_code_location)) {
         processedRepos.add(source_code_location)
         const existingSamples = await db
@@ -122,6 +100,28 @@ export async function scrapeData(): Promise<void> {
             `Skipping ${source_code_location}; samples already collected`
           )
           continue
+        }
+        const random = Math.random()
+        const logCve = async (bucket: 'training' | 'validation' | 'test') => {
+          await db
+            .insert(repos)
+            .values({ bucket, url: source_code_location })
+            .onConflictDoNothing()
+          await db
+            .insert(cves)
+            .values({
+              cve_id,
+              published_at: new Date(published_at),
+              repo_url: source_code_location
+            })
+            .onConflictDoNothing()
+        }
+        if (random > 0.8) {
+          await logCve('test')
+        } else if (random > 0.7) {
+          await logCve('validation')
+        } else {
+          await logCve('training')
         }
         await processGitRepo(db, octokit, source_code_location)
       }
@@ -156,42 +156,6 @@ async function processGitRepo(
     readCommits(git, repoUrl, directory.path)
   ])
   console.log(`Retrieved ${commits.length} commits for ${repoUrl}`)
-  const sampleRows = await buildSampleRows(
-    git,
-    directory.path,
-    repoUrl,
-    commits,
-    repoCves
-  )
-
-  console.log(`Sample rows for ${repoUrl}: ${JSON.stringify(sampleRows)}`)
-
-  if (sampleRows.length > 0) {
-    await db.insert(samples).values(sampleRows).onConflictDoNothing()
-  }
-}
-
-/**
- * Build a list of sample rows for a given Git repository.
- * @param git The SimpleGit instance to use for the Git operations.
- * @param directory The directory containing the cloned repository.
- * @param repoUrl The URL of the Git repository.
- * @param commits A non-empty list of commits, ordered from oldest to newest
- * and ending strictly before `CUTOFF`.
- * @param repoCves A list of CVE publication timestamps associated with the
- * repository; ordering is not required.
- * @returns A promise that resolves to an array of sample rows.
- * @remarks The first and last commit dates define the sampling range. Only
- * complete `SAMPLE_DURATION` windows are emitted; a remaining partial window
- * is discarded.
- */
-async function buildSampleRows(
-  git: SimpleGit,
-  directory: string,
-  repoUrl: string,
-  commits: GitCommit[],
-  repoCves: Array<{ publishedAt: Temporal.Instant }>
-): Promise<SampleRow[]> {
   if (commits.length === 0) throw Error(`No commits found for ${repoUrl}`)
   const durationMs = SAMPLE_DURATION.total('milliseconds')
   const firstDate = commits[0].date
@@ -202,16 +166,17 @@ async function buildSampleRows(
   console.log(`Building ${sampleCount} sample rows for ${repoUrl}`)
   const tagDates = await readTagDates(git)
 
-  return Promise.all(
-    Array.from({ length: sampleCount }, (_, index) => {
-      const start = firstDate.add({ milliseconds: index * durationMs })
-      const end = start.add({ milliseconds: durationMs })
-      console.log(
-        `Building sample row for ${repoUrl} from ${start.toString()} to ${end.toString()}`
-      )
-      return buildSampleRow(
+  const sampleRows: SampleRow[] = []
+  for (let i = 0; i < sampleCount; i++) {
+    const start = firstDate.add({ milliseconds: i * durationMs })
+    const end = start.add({ milliseconds: durationMs })
+    console.log(
+      `Building sample row for ${repoUrl} from ${start.toString()} to ${end.toString()}`
+    )
+    sampleRows.push(
+      await buildSampleRow(
         git,
-        directory,
+        directory.path,
         repoUrl,
         commits,
         repoCves,
@@ -221,8 +186,14 @@ async function buildSampleRows(
         },
         tagDates
       )
-    })
-  )
+    )
+  }
+
+  console.log(`Sample rows for ${repoUrl}: ${JSON.stringify(sampleRows)}`)
+
+  if (sampleRows.length > 0) {
+    await db.insert(samples).values(sampleRows).onConflictDoNothing()
+  }
 }
 
 /**
