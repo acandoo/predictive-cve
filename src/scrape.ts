@@ -189,7 +189,7 @@ async function processGitRepo(
     )
   }
 
-  console.log(`Sample rows for ${repoUrl}: ${JSON.stringify(sampleRows)}`)
+  console.log(`${sampleRows.length} sample rows for ${repoUrl}`)
 
   if (sampleRows.length > 0) {
     await db.insert(samples).values(sampleRows).onConflictDoNothing()
