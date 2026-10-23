@@ -15,20 +15,17 @@ export async function treeMetrics(git: SimpleGit, hash: string | undefined) {
   const files = (await git.raw(['ls-tree', '-r', '--name-only', hash]))
     .split('\n')
     .filter(Boolean)
-  const contents = await Promise.all(
-    files.map(async (file) => {
-      try {
-        return await git.show([`${hash}:${file}`])
-      } catch {
-        return ''
-      }
-    })
-  )
+  let loc = 0
+  for (const file of files) {
+    try {
+      const content = await git.show([`${hash}:${file}`])
+      loc += content.split('\n').length
+    } catch (e) {
+      console.error(`Error reading file ${file}:`, e)
+    }
+  }
   return {
-    loc: contents.reduce(
-      (total, content) => total + content.split('\n').length,
-      0
-    ),
+    loc,
     file_count: files.length
   }
 }
