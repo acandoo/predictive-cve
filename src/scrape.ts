@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm'
 import type { EmptyRelations } from 'drizzle-orm'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 import { Octokit } from 'octokit'
+import pLimit from 'p-limit'
 import { simpleGit } from 'simple-git'
 import type { SimpleGit } from 'simple-git'
 
@@ -18,7 +19,8 @@ import {
   DURATION_365D,
   DURATION_90D,
   SAMPLE_DURATION,
-  REPO_DIR
+  REPO_DIR,
+  MAX_CONCURRENT_REPOS
 } from './lib/helpers/constants.ts'
 import { initDrizzle } from './lib/helpers/drizzle.ts'
 import {
@@ -135,6 +137,10 @@ export async function scrapeData(): Promise<void> {
   }
 }
 
+const limit = pLimit(MAX_CONCURRENT_REPOS)
+const processGitRepo = (...args: Parameters<typeof processGitRepoInternal>) =>
+  limit(() => processGitRepoInternal(...args))
+
 /**
  * Process a Git repository by fetching its commits and associated CVEs.
  * @param db The database instance to use for storing the data.
@@ -145,7 +151,7 @@ export async function scrapeData(): Promise<void> {
  * oldest-to-newest and ends strictly before `CUTOFF`; downstream sampling
  * depends on those assumptions.
  */
-async function processGitRepo(
+async function processGitRepoInternal(
   db: LibSQLDatabase<EmptyRelations>,
   octokit: Octokit,
   repoUrl: string

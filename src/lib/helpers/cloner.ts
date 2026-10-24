@@ -1,7 +1,8 @@
 import pLimit from 'p-limit'
 import { simpleGit } from 'simple-git'
 
-const MAX_CONCURRENT_CLONES = 10
+import { MAX_CONCURRENT_CLONES } from './constants.ts'
+
 const git = simpleGit()
 const limit = pLimit(MAX_CONCURRENT_CLONES)
 
