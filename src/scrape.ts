@@ -79,53 +79,56 @@ export async function scrapeData(): Promise<void> {
       published: `<=${CUTOFF.toString()}`
     }
   )) {
-    for (const {
-      source_code_location,
-      cve_id,
-      published_at
-    } of response.data.filter(
-      (advisory): advisory is GitHubAdvisory =>
-        !!advisory.source_code_location?.startsWith('https://github.com/') &&
-        typeof advisory.cve_id === 'string'
-    )) {
-      if (!processedRepos.has(source_code_location)) {
-        processedRepos.add(source_code_location)
-        const existingSamples = await db
-          .select({ id: samples.id })
-          .from(samples)
-          .where(eq(samples.repo_url, source_code_location))
-          .limit(1)
-        if (existingSamples.length > 0) {
-          console.log(
-            `Skipping ${source_code_location}; samples already collected`
-          )
-          continue
-        }
-        const random = Math.random()
-        const logCve = async (bucket: 'training' | 'validation' | 'test') => {
-          await db
-            .insert(repos)
-            .values({ bucket, url: source_code_location })
-            .onConflictDoNothing()
-          await db
-            .insert(cves)
-            .values({
-              cve_id,
-              published_at: new Date(published_at),
-              repo_url: source_code_location
-            })
-            .onConflictDoNothing()
-        }
-        if (random > 0.8) {
-          await logCve('test')
-        } else if (random > 0.7) {
-          await logCve('validation')
-        } else {
-          await logCve('training')
-        }
-        await processGitRepo(db, octokit, source_code_location)
-      }
-    }
+    await Promise.all(
+      response.data
+        .filter(
+          (advisory): advisory is GitHubAdvisory =>
+            !!advisory.source_code_location?.startsWith(
+              'https://github.com/'
+            ) && typeof advisory.cve_id === 'string'
+        )
+        .map(async ({ source_code_location, cve_id, published_at }) => {
+          if (!processedRepos.has(source_code_location)) {
+            processedRepos.add(source_code_location)
+            const existingSamples = await db
+              .select({ id: samples.id })
+              .from(samples)
+              .where(eq(samples.repo_url, source_code_location))
+              .limit(1)
+            if (existingSamples.length > 0) {
+              console.log(
+                `Skipping ${source_code_location}; samples already collected`
+              )
+              return
+            }
+            const random = Math.random()
+            const logCve = async (
+              bucket: 'training' | 'validation' | 'test'
+            ) => {
+              await db
+                .insert(repos)
+                .values({ bucket, url: source_code_location })
+                .onConflictDoNothing()
+              await db
+                .insert(cves)
+                .values({
+                  cve_id,
+                  published_at: new Date(published_at),
+                  repo_url: source_code_location
+                })
+                .onConflictDoNothing()
+            }
+            if (random > 0.8) {
+              await logCve('test')
+            } else if (random > 0.7) {
+              await logCve('validation')
+            } else {
+              await logCve('training')
+            }
+            return processGitRepo(db, octokit, source_code_location)
+          }
+        })
+    )
   }
 }
 
@@ -166,15 +169,14 @@ async function processGitRepo(
   console.log(`Building ${sampleCount} sample rows for ${repoUrl}`)
   const tagDates = await readTagDates(git)
 
-  const sampleRows: SampleRow[] = []
-  for (let i = 0; i < sampleCount; i++) {
-    const start = firstDate.add({ milliseconds: i * durationMs })
-    const end = start.add({ milliseconds: durationMs })
-    console.log(
-      `Building sample row for ${repoUrl} from ${start.toString()} to ${end.toString()}`
-    )
-    sampleRows.push(
-      await buildSampleRow(
+  const sampleRows = await Promise.all(
+    Array.from({ length: sampleCount }, (_, index) => {
+      const start = firstDate.add({ milliseconds: index * durationMs })
+      const end = start.add({ milliseconds: durationMs })
+      console.log(
+        `Building sample row for ${repoUrl} from ${start.toString()} to ${end.toString()}`
+      )
+      return buildSampleRow(
         git,
         directory.path,
         repoUrl,
@@ -186,8 +188,8 @@ async function processGitRepo(
         },
         tagDates
       )
-    )
-  }
+    })
+  )
 
   console.log(`${sampleRows.length} sample rows for ${repoUrl}`)
 
