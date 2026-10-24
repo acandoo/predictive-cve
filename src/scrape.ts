@@ -20,7 +20,8 @@ import {
   DURATION_90D,
   SAMPLE_DURATION,
   REPO_DIR,
-  MAX_CONCURRENT_REPOS
+  MAX_CONCURRENT_REPOS,
+  BLOCKLIST
 } from './lib/helpers/constants.ts'
 import { initDrizzle } from './lib/helpers/drizzle.ts'
 import {
@@ -90,7 +91,9 @@ export async function scrapeData(): Promise<void> {
           (advisory): advisory is GitHubAdvisory =>
             !!advisory.source_code_location?.startsWith(
               'https://github.com/'
-            ) && typeof advisory.cve_id === 'string'
+            ) &&
+            typeof advisory.cve_id === 'string' &&
+            !BLOCKLIST.includes(advisory.source_code_location)
         )
         .map(async ({ source_code_location, cve_id, published_at }) => {
           if (!processedRepos.has(source_code_location)) {
