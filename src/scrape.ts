@@ -17,7 +17,8 @@ import {
   CUTOFF,
   DURATION_365D,
   DURATION_90D,
-  SAMPLE_DURATION
+  SAMPLE_DURATION,
+  REPO_DIR
 } from './lib/helpers/constants.ts'
 import { initDrizzle } from './lib/helpers/drizzle.ts'
 import {
@@ -51,6 +52,8 @@ type GitHubAdvisory = Omit<Advisory, 'source_code_location' | 'cve_id'> & {
  */
 export async function scrapeData(): Promise<void> {
   const processedRepos = new Set<string>()
+  await fs.rm(REPO_DIR, { recursive: true, force: true })
+  await fs.mkdir(REPO_DIR, { recursive: true })
   const db = await initDrizzle()
   if (!process.env.GITHUB_TOKEN) console.error('GITHUB_TOKEN is not set')
   const octokitClass = Octokit.plugin(throttling)
@@ -148,7 +151,7 @@ async function processGitRepo(
   repoUrl: string
 ) {
   await using directory = await fs.mkdtempDisposable(
-    path.join(os.tmpdir(), 'predictive-cve-repo')
+    path.join(REPO_DIR, 'predictive-cve-repo')
   )
   const git = simpleGit(directory.path, {
     maxConcurrentProcesses: os.availableParallelism()
