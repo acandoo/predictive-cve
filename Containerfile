@@ -13,9 +13,9 @@ RUN apt-get update \
 WORKDIR /app
 VOLUME ["/data"]
 
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml drizzle.config.ts ./
 RUN pnpm install --frozen-lockfile --prod=true
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml drizzle.config.ts ./
 COPY src ./src
 COPY drizzle ./drizzle
 
