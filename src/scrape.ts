@@ -78,6 +78,18 @@ export async function scrapeData(): Promise<void> {
     }
   })
 
+  const { BLOCKLIST_FILE } = process.env
+  if (BLOCKLIST_FILE) {
+    const blocklistContent = await fs.readFile(BLOCKLIST_FILE, 'utf-8')
+    const blocklistUrls = blocklistContent
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    for (const url of blocklistUrls) {
+      BLOCKLIST.push(url)
+    }
+  }
+
   for await (const response of octokit.paginate.iterator(
     octokit.rest.securityAdvisories.listGlobalAdvisories,
     {
@@ -133,7 +145,17 @@ export async function scrapeData(): Promise<void> {
             } else {
               await logCve('training')
             }
-            return processGitRepo(db, octokit, source_code_location)
+            try {
+              return processGitRepo(db, octokit, source_code_location)
+            } catch (error) {
+              console.error(`Error processing ${source_code_location}:`, error)
+              console.error(
+                'Setting sample metrics to zero for this repository'
+              )
+              if (BLOCKLIST_FILE) {
+                await fs.appendFile(BLOCKLIST_FILE, `${source_code_location}\n`)
+              }
+            }
           }
         })
     )
