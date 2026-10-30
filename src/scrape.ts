@@ -146,7 +146,7 @@ export async function scrapeData(): Promise<void> {
               await logCve('training')
             }
             try {
-              return processGitRepo(db, octokit, source_code_location)
+              return await processGitRepo(db, octokit, source_code_location)
             } catch (error) {
               console.error(`Error processing ${source_code_location}:`, error)
               console.error(
@@ -164,7 +164,13 @@ export async function scrapeData(): Promise<void> {
 
 const limit = pLimit(MAX_CONCURRENT_REPOS)
 const processGitRepo = (...args: Parameters<typeof processGitRepoInternal>) =>
-  limit(() => processGitRepoInternal(...args))
+  new Promise((res, rej) =>
+    limit(() =>
+      processGitRepoInternal(...args)
+        .then(res)
+        .catch(rej)
+    )
+  )
 
 /**
  * Process a Git repository by fetching its commits and associated CVEs.
@@ -203,27 +209,34 @@ async function processGitRepoInternal(
   console.log(`Building ${sampleCount} sample rows for ${repoUrl}`)
   const tagDates = await readTagDates(git)
 
-  const sampleRows = await Promise.all(
-    Array.from({ length: sampleCount }, (_, index) => {
-      const start = firstDate.add({ milliseconds: index * durationMs })
-      const end = start.add({ milliseconds: durationMs })
-      console.log(
-        `Building sample row for ${repoUrl} from ${start.toString()} to ${end.toString()}`
-      )
-      return buildSampleRow(
-        git,
-        directory.path,
-        repoUrl,
-        commits,
-        repoCves,
-        {
-          start,
-          end
-        },
-        tagDates
-      )
-    })
-  )
+  const sampleRows = (
+    await Promise.all(
+      Array.from({ length: sampleCount }, async (_, index) => {
+        const start = firstDate.add({ milliseconds: index * durationMs })
+        const end = start.add({ milliseconds: durationMs })
+        console.log(
+          `Building sample row for ${repoUrl} from ${start.toString()} to ${end.toString()}`
+        )
+        try {
+          return await buildSampleRow(
+            git,
+            directory.path,
+            repoUrl,
+            commits,
+            repoCves,
+            {
+              start,
+              end
+            },
+            tagDates
+          )
+        } catch (error) {
+          console.error(`Error building sample row for ${repoUrl}:`, error)
+          return null
+        }
+      })
+    )
+  ).filter<SampleRow>((row) => row !== null)
 
   console.log(`${sampleRows.length} sample rows for ${repoUrl}`)
 
